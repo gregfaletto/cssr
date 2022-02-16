@@ -1,0 +1,2587 @@
+
+#' Cluster Stability Selection
+#'
+#' Executes cluster stability selection algorithm.
+#' @param X An n x p numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the p >= 2 features/predictors.
+#' @param y The response; can be anything that takes the form of an
+#' n-dimensional vector, with the ith entry corresponding to the ith row of X.
+#' Typically (and for default fitfun = cssLasso), y should be an n-dimensional
+#' numeric vector.
+#' @param lambda A tuning parameter or set of tuning parameters that may be used
+#' by the feature selection method fitfun. In the default case when
+#' fitfun = cssLasso, lambda should be a numeric: the penalty to use for each
+#' lasso fit. (css does not require lambda to be any particular object because
+#' for a user-specified feature selection method fitfun, lambda can be an 
+#' arbitrary object. See the description of fitfun below.)
+#' @param clusters Either an integer vector of a list of integer vectors; each
+#' vector should contain the indices of a cluster of features (a subset of 1:p).
+#' (If there is only one cluster, clusters can either be a list of length 1 or
+#' an integer vector.) All of the provided clusters must be non-overlapping.
+#' Every feature not appearing in any cluster will be assumed to be unclustered
+#' (that is, they  will be treated as if they are in a "cluster" containing only
+#' themselves). If clusters is a list of length 0 (or a list only containing
+#' clusters of length 1), then css() returns the same results as stability
+#' selection (so feat_sel_mat will be identical to clus_sel_mat). Names for
+#' the clusters will be needed later; any clusters that are not given names
+#' in the list clusters will be given names automatically by css. Default is
+#' list() (so no clusters are specified).
+#' @param fitfun A function; the feature selection function used on each
+#' subsample by cluster stability selection. This can be any feature selection
+#' method; the only
+#' requirement is that it accepts the arguments (and only the arguments) X, y,
+#' and lambda and returns an integer vector that is a subset of 1:p. For
+#' example, fitfun could be best subset selection or forward stepwise selection
+#' (as implemented by the R package leaps) or LARS (from the R package lars) and
+#' lambda could be the desired model size; or fitfun could be the elastic
+#' net (as implemented by the R package glmnet) and lambda could be a length-two
+#' vector specifying lambda and alpha. Default is cssLasso, an implementation
+#' of lasso (relying on the R package glmnet), where lambda must be a positive
+#' numeric specifying the L1 penalty for the lasso.
+#' @param sampling_type A character vector; either "SS" or "MB". For "MB",
+#' all B subsamples are drawn randomly (as proposed by Meinshausen and Bühlmann
+#' 2010). For "SS", in addition to these B subsamples, the B complementary pair
+#' subsamples will be drawn as well (see Faletto and Bien 2022 or Shah and
+# Samworth 2013 for details). Default is "SS".
+#' @param B Integer or numeric; the number of subsamples. Note: For 
+#' saampling.type=="MB" the total number of subsamples will be B; for 
+#' sampling_type="SS" the number of subsamples will be 2*B. Default is 100
+#' for sampling_type="MB" and 50 for sampling_type="SS".
+#' @param prop_feats_remove Numeric; if prop_feats_remove is greater than 0,
+#' then on each subsample, each feature is randomly dropped from the design
+#' matrix that is provided to fitfun with probability prop_feats_remove
+#' (independently across features). That is, in a typical subsample,
+#' prop_feats_remove*p features will be dropped (though this number will vary).
+#' This is similar in spirit (but distinct from) extended stability selection
+#' (Beinrucker et. al. 2016); see their paper for some of the benefits of
+#' dropping features (besides increasing computational speed and decreasing
+#' memory requirements). For sampling_type="SS", the features dropped in
+#' each complementary pair of subsamples are identical in order to ensure that
+#' the theoretical guarantees of Faletto and Bien (2022) are retained within
+#' each individual pair of subsamples. (Note that this feature is not
+#' investigated either theoretically or in simulations by Faletto and Bien
+#' 2022). Must be between 0 and 1. Default is 0.
+#' @param train_inds Optional; an integer or numeric vector containing the
+#' indices of observations in X and y to set aside for model training by the
+#' function getCssPreds after feature selection. If train_inds is not provided,
+#' all of the observations in the provided data will be used for feature
+#' selection. 
+#' @return A list containing the following items: \item{feat_sel_mat}{A B (or
+#' 2B for sampling.method "SS") x p numeric (binary) matrix.
+#' feat_sel_mat[i, j] = 1 if feature j was selected by the base feature
+#' selection method on subsample i, and 0 otherwise.} \item{clus_sel_mat}{A B 
+#' (or 2*B for SS sampling) x length(selected) numeric (binary) matrix.
+#' clus_sel_mat[i, j] = 1 if at least one feature from cluster j was selected by
+#' the base feature selection method on subsample i, and 0 otherwise.}
+#' \item{X}{The X matrix provided to css.} \item{y}{The y vector provided to
+#' css.} \item{clusters}{A named list of integer vectors containing all of the
+#' clusters provided to css, as well as size 1 clusters of any features not
+#' listed in any of the clusters provided to css. All clusters will have names;
+#' any clusters not provided with a name in the input to css will be given names
+#' automatically by css (of the form c1, etc.).'} \item{train_inds}{Identical
+#' to the train_inds provided to css.}
+#' @author Gregory Faletto, Jacob Bien
+#' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
+#' \emph{arXiv preprint arXiv:2201.00494}.
+#' \url{https://arxiv.org/abs/2201.00494}. \cr Shah, R. D., & Samworth, R. J.
+#' (2013). Variable selection with error control: Another look at stability
+#' selection. \emph{Journal of the Royal Statistical Society. Series B:
+#' Statistical Methodology}, 75(1), 55–80.
+#' \url{https://doi.org/10.1109/RITA.2014.2302071}. \cr Meinshausen, N., &
+#' Bühlmann, P. (2010). Stability Selection. \emph{Journal of the Royal
+#' Statistical Society. Series B: Statistical Methodology}, 72(4), 417–473.
+#' \url{https://rss.onlinelibrary.wiley.com/doi/full/10.1111/j.1467-9868.2010.00740.x}.
+#' \cr Beinrucker, A., Dogan, Ü., &
+#' Blanchard, G. (2016). Extensions of stability selection using subsamples of
+#' observations and covariates. \emph{Statistics and Computing}, 26(5), 1059-
+#' 1077. \url{https://doi.org/10.1007/s11222-015-9589-y}.
+#' @export
+css <- function(X, y, lambda
+    , clusters = list()
+    , fitfun = cssLasso
+    , sampling_type = "SS"
+    , B = ifelse(sampling_type == "MB", 100L, 50L)
+    , prop_feats_remove = 0
+    , train_inds = integer()
+    # , ...
+    ){
+
+    # Check inputs
+
+    feat_names <- as.character(NA)
+    if(!is.null(colnames(X))){
+        feat_names <- colnames(X)
+    }
+    clust_names <- as.character(NA)
+    if(!is.null(names(clusters))){
+        clust_names <- names(clusters)
+    }
+
+    # Check if x is a matrix; if it's a data.frame, convert to matrix.
+    if(is.data.frame(X)){
+        X <- model.matrix(~ ., X)
+    }
+
+    stopifnot(is.matrix(X))
+    stopifnot(all(!is.na(X)))
+
+    n <- nrow(X)
+    p <- ncol(X)
+    stopifnot(p >= 2)
+    if(length(feat_names) > 1){
+        stopifnot(length(feat_names) == p)
+    } else{
+        stopifnot(is.na(feat_names))
+    }
+    
+    colnames(X) <- character()
+
+    stopifnot(length(y) == n)
+    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # inputs should be checked within fitfun.
+
+    stopifnot(!is.na(clusters))
+    if(is.list(clusters)){
+        stopifnot(all(!is.na(clusters)))
+        stopifnot(length(clusters) == length(unique(clusters)))
+
+        if(is.list(clusters) & length(clusters) > 0){
+            for(i in 1:length(clusters)){
+                stopifnot(length(clusters[[i]]) == length(unique(clusters[[i]])))
+                stopifnot(all(!is.na(clusters[[i]])))
+                stopifnot(is.integer(clusters[[i]]) | is.numeric(clusters[[i]]))
+                stopifnot(all(clusters[[i]] == round(clusters[[i]])))
+                clusters[[i]] <- as.integer(clusters[[i]])
+            }
+
+            if(length(clusters) >= 2){
+                # Check that clusters are non-overlapping
+                for(i in 1:(length(clusters) - 1)){
+                    for(j in (i+1):length(clusters)){
+                        if(length(intersect(clusters[[i]], clusters[[j]])) != 0){
+                            error_mes <- paste("Overlapping clusters detected; clusters must be non-overlapping. Overlapping clusters: ",
+                                i, ", ", j, ".", sep="")
+                            stop(error_mes)
+                        }
+                    }
+                }
+            }
+        } 
+    } else{
+        stopifnot(is.numeric(clusters) | is.integer(clusters))
+        stopifnot(length(clusters) == length(unique(clusters)))
+        stopifnot(all(!is.na(clusters)))
+        stopifnot(is.integer(clusters) | is.numeric(clusters))
+        stopifnot(all(clusters == round(clusters)))
+        clusters <- as.integer(clusters)
+
+    }
+
+    stopifnot(class(fitfun) == "function")
+    stopifnot(length(fitfun) == 1)
+    if(!identical(formals(fitfun), formals(cssLasso))){
+        err_mess <- paste("fitfun must accept arguments named X, y, and lambda. Detected arguments to fitfun:",
+            paste(names(formals(fitfun)), collapse=", "))
+        stop(err_mess)
+    }
+    
+    stopifnot(is.character(sampling_type))
+    stopifnot(length(sampling_type) == 1)
+    stopifnot(sampling_type %in% c("SS", "MB"))
+
+    stopifnot(length(B) == 1)
+    stopifnot(is.numeric(B) | is.integer(B))
+    stopifnot(B == round(B))
+    stopifnot(B > 0)
+    if(B < 10){
+        warning("Small values of B may lead to poor results.")
+    } else if (B > 2000){
+        warning("Large values of B may require long computation times.")
+    }
+
+    stopifnot(length(prop_feats_remove) == 1)
+    stopifnot(is.numeric(prop_feats_remove) | is.integer(prop_feats_remove))
+    stopifnot(prop_feats_remove >= 0 & prop_feats_remove < 1)
+    if(prop_feats_remove > 0){
+        # Make sure p is at least 2 or else this doesn't make sense
+        stopifnot(p >= 2)
+    }
+
+    stopifnot(is.numeric(train_inds) | is.integer(train_inds))
+    if(length(train_inds) > 0){
+        stopifnot(all(!is.na(train_inds)))
+        stopifnot(all(round(train_inds) == train_inds))
+        stopifnot(length(train_inds) == length(unique(train_inds)))
+        stopifnot(all(train_inds >= 1))
+        stopifnot(all(train_inds) <= n)
+        stopifnot(length(train_inds) <= n - 2)
+        stopifnot(length(train_inds) >= 1)
+    }
+    train_inds <- as.integer(train_inds)
+    
+    ### Create subsamples
+
+    sel_inds <- setdiff(1:n, train_inds)
+    n_sel <- length(sel_inds)
+    if(n_sel < 4){
+        stop("Too many training indices provided (must be at least 4 observations left for feature selection, and ideally many more)")
+    }
+
+    subsamps_object <- createSubsamples(n_sel, p, B, sampling_type,
+        prop_feats_remove)
+
+    ### Get matrix of selected feature sets from subsamples
+
+    res <- getSelMatrix(X[sel_inds, ], y[sel_inds], lambda, B, sampling_type,
+        subsamps_object, fitfun)
+
+    #############################################
+
+    # Format clusters into a list with no clusters of size 1
+    clusters <- formatClusters(clusters, p=p, clust_names=clust_names)$clusters
+
+    ### Get selection proportions for clusters corresponding to each feature
+
+    clus_prop_results <- getClusterProps(clusters, res, sampling_type)
+
+    clus_sel_props_p <- clus_prop_results$clus_sel_props_p
+    res_clus_p <- clus_prop_results$res_clus_p
+    res_n_clusters <- clus_prop_results$res_n_clusters
+
+    rm(clus_prop_results)
+
+    if(any(!is.na(feat_names))){
+        colnames(res) <- feat_names
+        colnames(X) <- feat_names
+    }
+
+    # Check outputs
+    stopifnot(!is.null(colnames(res_n_clusters)))
+    ret <- list(feat_sel_mat = res,
+        clus_sel_mat = res_n_clusters,
+        X = X,
+        y = y,
+        clusters = clusters,
+        train_inds = train_inds
+        )
+
+    class(ret) <- "cssr"
+    
+    return(ret)
+}
+
+#' Generate randomly sampled data including noisy observations of latent
+#' variables
+#'
+#' Generate a data set including latent features Z, observed features X (which
+#' may include noisy or noiseless observations of the latent features in Z),
+#' an observed response y which is a linear model of features from Z and X as
+#' well as independent mean zero noise, and mu (the responses from y without
+#' the added noise). Data is generated in the same way as in the simulations
+#' from Faletto and Bien (2022).
+#' @param n Integer or numeric; the number of observations to generate. (The
+#' generated X and Z will have n rows, and the generated y and mu will have 
+#' length n.)
+#' @param p Integer or numeric; the number of features to generate. The 
+#' generated X will have p columns.
+#' @param k_unclustered Integer or numeric; the number of features in X that
+#' will have nonzero coefficients in the true model for y among those features not
+#' generated from the n_clusters latent variables (called "weak signal" features
+#' in the simulations from Faletto and Bien 2022). The coefficients on these
+#' features will be determined by beta_unclustered.
+#' @param cluster_size Integer or numeric; for each of the n_clusters latent
+#' variables, X will contain cluster_size noisy proxies that are correlated with
+#' the latent variable.
+#' @param n_clusters Integer or numeric; the number of latent variables to
+#' generate, each of which will be associated with an observed cluster in X.
+#' Must be at least 1. Default is 1.
+#' @param sig_clusters Integer or numeric; the number of generated latent
+#' features that will have nonzero coefficients in the true model for y (all of
+#' them will have coefficient beta_latent). Must be less than or equal to
+#' n_clusters. Default is 1.
+#' @param rho Integer or numeric; the covariance of the proxies in each cluster
+#' with the latent variable (and each other). Note that the correlation between
+#' the features in the cluster will be rho/var. Default is 0.9.
+#' @param var Integer or numeric; the variance of all of the observed features
+#' in X (both the proxies for the latent variables and the k_unclustered other
+#' features). Default is 1.
+#' @param beta_latent Integer or numeric; the coefficient used for all 
+#' sig_clusters latent variables that have nonzero coefficients in the true 
+#' model for y. Default is 1.5.
+#' @param beta_unclustered Integer or numeric; the maximum coefficient in the 
+#' model for y among the k_unclustered features in X not generated from the
+#' latent variables. The coefficients of the features will be
+#' beta_unclustered/sqrt(1:k_unclustered). Default is 1.
+#' @param snr Integer or numeric; the signal-to-noise ratio of the response
+#' y. If snr is specified, the variance of the noise in y will be calculated
+#' using the formula sigma_eps_sq = sum(mu^2)/(n * snr). Only one of snr and
+#' sigma_eps_sq must be specified. Default is NA.
+#' @param sigma_eps_sq Integer or numeric; the variance on the noise added
+#' to y. Only one of snr and sigma_eps_sq must be specified. Default is NA.
+#' @return A list of the following elements. \item{X}{An n x p matrix of
+#' n observations from a p-dimensional multivariate normal distribution
+#' generated using the specified parameters. The first n_clusters times cluster_size
+#' features will be the clusters of features correlated with the n_clusters
+#' latent variables. The next k_unclustered features will be the "weak signal"
+#' features, and the remaining p - n_clusters*cluster_size - k_unclustered
+#' features will be the unclustered noise features.} \item{y}{The response
+#' generated from X, the latent features from Z, and the coefficient vector.}
+#' \item{Z}{The latent features; either a numeric vector (if n_clusters > 1) or
+#' a numeric matrix (if n_clusters > 1).} \item{mu}{The expected response given
+#' X, Z, and the true coefficient vector (equal to y minus the added noise).}
+#' @author Gregory Faletto, Jacob Bien
+#' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
+#' \emph{arXiv preprint arXiv:2201.00494}.
+#' \url{https://arxiv.org/abs/2201.00494}.
+#' @export
+genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
+    sig_clusters=1, rho=0.9, var=1, beta_latent=1.5, beta_unclustered=1,
+    snr=as.numeric(NA), sigma_eps_sq=as.numeric(NA)){
+
+    # Check inputs
+    stopifnot(sig_clusters <= n_clusters)
+    stopifnot(p >= n_clusters*cluster_size + k_unclustered)
+    stopifnot(abs(rho) <= abs(var))
+    stopifnot(n_clusters >= 1)
+
+    # Same as make_sparse_blocked_linear_model_random, but ith coefficient
+    # of weak signal features is beta_unclustered/sqrt(i) in order to have
+    # a definitive ranking of weak signal features.
+    if(is.na(snr) & is.na(sigma_eps_sq)){
+        stop("Must specify one of snr or sigma_eps_sq")
+    }
+
+    # Generate covariance matrix (latent features are mixed in matrix, so each
+    # cluster will be of size cluster_size + 1)
+    Sigma <- make_covariance_matrix(p + sig_clusters, n_clusters, cluster_size +
+        1, rho, var)
+
+    # Generate coefficients
+    # Note that beta has length p + sig_clusters
+    coefs <- make_coefficients4_ranking2(p + sig_clusters, k_unclustered,
+        beta_unclustered, beta_latent, n_clusters, sig_clusters,
+        cluster_size + 1)
+
+    # Generate mu, X, z, sd, y
+    gen_mu_x_y_sd_res <- gen_mu_x_y_sd(n, p, coefs$beta, Sigma, sig_clusters,
+        cluster_size, snr, sigma_eps_sq)
+
+    # Note that X is n x p
+    X <- gen_mu_x_y_sd_res$X
+    # Z is a vector if n_clusters = 1; if n_clusters > 1, Z is a n x n_clusters
+    # matrix
+    Z <- gen_mu_x_y_sd_res$z
+
+    # Note that mu has length n
+    mu <- gen_mu_x_y_sd_res$mu
+    sd <- gen_mu_x_y_sd_res$sd
+
+    y <- mu + sd * rnorm(n)
+
+    return(list(X=X, y=y, Z=Z, mu=mu))
+}
+
+#' Get lambda value for lasso
+#'
+#' Chooses a lambda value for the lasso by cross-validation.
+#' @param X An n x p numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the p >= 2 features/predictors that will be used by cluster stability
+#' selection.
+#' @param y The response; an n-dimensional numeric vector.
+#' @param lambda_choice Character; either "min" or "1se". If "min", chooses
+#' the lambda that minimizes the cross-validated error; if "1se", chooses the
+#' largest lambda within one standard error of the minimum error lambda
+#' (resulting in a smaller selected set, which may be desirable because the
+#' model size corresponding to the minimum error lambda tends to be larger
+#' than optimal. See, for example, Bühlmann and Meinshausen 2006, Prop. 1 and
+#' Bühlmann and van de Geer 2011, Section 2.5.1.). Default is "1se".
+#' @param nfolds Numeric or integer; the number of folds for cross-validation.
+#' Must be at least 4 (as specified by cv.glmnet). Default is 10.
+#' @return A numeric; the selected value of lambda.
+#' @author Gregory Faletto, Jacob Bien
+#' @references Bühlmann, P., & Meinshausen, N. (2006). High-Dimensional Graphs
+#' and Variable Selection With the Lasso. \emph{The Annals of Statistics},
+#' 34(3), 1436–1462. \url{https://doi.org/10.1214/009053606000000281}.
+#' \cr Peter Bühlmann and Sara van de Geer. Statistics for High-Dimensional
+#' Data. \emph{Springer Series in Statistics}. Springer, Heidelberg, 2011. ISBN
+#' 978-3-642-20191-2. \url{http://dx.doi.org/10.1007/978-3-642-20192-9}.
+#' @export
+getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
+    stopifnot(is.character(lambda_choice))
+    stopifnot(length(lambda_choice) == 1)
+    stopifnot(!is.na(lambda_choice))
+    stopifnot(lambda_choice %in% c("min", "1se"))
+
+    n <- nrow(X)
+    stopifnot(n == length(y))
+
+    stopifnot(is.numeric(nfolds) | is.integer(nfolds))
+    stopifnot(nfolds == round(nfolds))
+    stopifnot(nfolds > 3)
+
+    # Sample size to use: inflate n/2 by a factor of nfolds/(nfolds - 1),
+    # so that each individual lasso fit is of size floor(n/2)
+
+    n_sample <- min(round(n/2*nfolds/(nfolds - 1)), n)
+    nfolds <- min(nfolds, n_sample)
+
+    inds_size <- sample(1:n, n_sample)
+    size_results <- cv.glmnet(x=X[inds_size, ], y=y[inds_size],
+        family="gaussian", nfolds=nfolds)
+
+    lambda_ret <- size_results[[paste("lambda.", lambda_choice, sep="")]]
+
+    # Check output
+    stopifnot(length(lambda_ret) == 1)
+    stopifnot(is.numeric(lambda_ret) | is.integer(lambda_ret))
+    stopifnot(lambda_ret >= 0)
+
+    return(lambda_ret)
+}
+
+#' Fit model and generate predictions from new data
+#'
+#' Generate predictions on test data using cluster stability-selected model.
+#' @param css_results An object of class "cssr" (the output of the function
+#' css).
+#' @param testX A numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the data that will be used to generate predictions. Must contain the same
+#' features (in the same
+#' number of columns) as the matrix provided to css, and if the columns of testX
+#' are labeled, the names must match the variable names provided to css.
+#' @param weighting Character; determines how to calculate the weights to
+#' combine features from the selected clusters into weighted averages, called
+#' cluster representatives. Must be one of "sparse", "weighted_avg", or 
+#' "simple_avg'. For "sparse", all the weight is put on the most frequently
+#' selected individual cluster member (or divided equally among all the clusters
+#' that are tied for the top selection proportion if there is a tie). For
+#' "weighted_avg", the weight used for each cluster member is calculated in
+#' proportion to the individual selection proportions of each feature. For
+#' "simple_avg", each cluster member gets equal weight regardless of the
+#' individual feature selection proportions (that is, the cluster representative
+#' is just a simple average of all the cluster members). See Faletto and Bien
+#' (2022) for details. Default is "weighted_avg".
+#' @param cutoff Numeric; getCssPreds will make use only of those clusters with
+#' selection proportions equal to at least cutoff. Must be between 0 and 1.
+#' Default is 0 (in which case either all clusters are used, or max_num_clusts
+#' are used, if max_num_clusts is specified).
+#' @param min_num_clusts Integer or numeric; the minimum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns fewer than
+#' min_num_clusts clusters, the cutoff will be increased until at least
+#' min_num_clusts clusters are selected.) Default is 0.
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' max_num_clusts is ignored).
+#' @param trainX A numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the data that will be used to estimate the linear model from the selected
+#' clusters. trainX is only necessary to provide if no train_inds were
+#' designated in the css function call to set aside observations for model
+#' estimation (though even if train_inds was provided, trainX and trianY will be
+#' used for model estimation regardless if they are both provided to
+#' getCssPreds). Must contain the same features (in the same number of columns)
+#' as the matrix provided to css, and if the columns of trainX
+#' are labeled, the names must match the variable names provided to css.
+#' Default is NA (in which case getCssPreds uses the observations from
+#' the train_inds that were provided to css to estimate a linear model).
+#' @param trainY The response corresponding to trainX. Must be of the same type
+#' as the response provided to css, and must have the same length as the number
+#' of rows of trainX. Like trainX, only needs to be provided if no observations
+#' were set aside for model estimation by the parameter train_inds in the css
+#' function call. Default is NA (in which case getCssPreds uses the observations
+#' from the train_inds that were provided to css).
+#' @return \item{predictions}{A vector of predictions corresponding to the
+#' observations from testX. (predictions will have length equal to
+#' nrow(testX).)}
+#' @author Gregory Faletto, Jacob Bien
+#' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
+#' \emph{arXiv preprint arXiv:2201.00494}.
+#' \url{https://arxiv.org/abs/2201.00494}.
+#' @export
+getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
+    min_num_clusts=0, max_num_clusts=NA, trainX=NA, trainY=NA){
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    trainXProvided <- FALSE
+    if(all(!is.na(trainX))){
+        if(length(trainX) > 1){
+            trainXProvided <- TRUE
+            n_train <- nrow(trainX)
+            stopifnot(n_train > 1)
+
+            results <- checkXInputResults(trainX, css_results$X)
+            trainX <- results$newx
+
+            rm(results)
+        } else{
+            stopifnot(all(is.na(newX)))
+            stopifnot(length(newX) == 1)
+
+            if(length(css_results$train_inds) == 0){
+                stop("css was not provided with indices to set aside for model training (train_inds), so must provide newX in order to generate a design matrix")
+            }
+
+            if(length(trainY) != 1){
+                warning("trainY provided but no trainX provided; instead, training model using the train_inds observations provided to css to set aside for model training.")
+            }
+        } 
+    } else{
+        stopifnot(all(is.na(trainX)))
+        stopifnot(length(trainX) == 1)
+
+        if(length(css_results$train_inds) == 0){
+            stop("css was not provided with indices to set aside for model training (train_inds), so must provide both trainX and trainY in order to generate predictions")
+        }
+
+        if(length(trainY) != 1){
+            warning("trainY provided but no trainX provided; instead, training model using the train_inds observations provided to css to set aside for model training.")
+        }
+    }
+
+    if(trainXProvided){
+        if(all(!is.na(trainY))){
+            stopifnot(is.numeric(trainY))
+            stopifnot(n_train == length(trainY))
+        } else{
+            if(length(css_results$train_inds) == 0){
+                stop("css was not provided with indices to set aside for model training (train_inds), so must provide both trainX and trainY in order to generate predictions")
+            } 
+
+            trainXProvided <- FALSE
+
+            if(length(trainX) != 1){
+                warning("trainX provided but no trainY provided; instead, training model using the train_inds observations provided to css to set aside for model training.")
+            }
+        }
+    }
+
+    results <- checkXInputResults(testX, css_results$X)
+
+    testX <- results$newx
+    feat_names <- results$feat_names
+    
+    rm(results)
+
+    n <- nrow(testX)
+    p <- ncol(testX)
+
+    stopifnot(is.numeric(cutoff) | is.integer(cutoff))
+    stopifnot(length(cutoff) == 1)
+    stopifnot(cutoff >= 0)
+    stopifnot(cutoff <= 1)
+
+    stopifnot(length(weighting)==1)
+    if(!is.character(weighting)){
+        stop("Weighting must be a character")
+    }
+    if(!(weighting %in% c("sparse", "simple_avg", "weighted_avg"))){
+        stop("Weighting must be a character and one of sparse, simple_avg, or weighted_avg")
+    }
+
+    stopifnot(length(min_num_clusts) == 1)
+    stopifnot(is.numeric(min_num_clusts) | is.integer(min_num_clusts))
+    stopifnot(min_num_clusts == round(min_num_clusts))
+    stopifnot(min_num_clusts >= 0)
+    stopifnot(min_num_clusts <= p)
+
+    stopifnot(length(max_num_clusts) == 1)
+    if(!is.na(max_num_clusts)){
+        stopifnot(is.numeric(max_num_clusts) | is.integer(max_num_clusts))
+        stopifnot(max_num_clusts == round(max_num_clusts))
+        stopifnot(max_num_clusts >= 0)
+        max_num_clusts <- as.integer(min(p, max_num_clusts))
+        max_num_clusts <- as.integer(min(length(css_results$clusters),
+            max_num_clusts))
+        stopifnot(max_num_clusts >= min_num_clusts)
+    }
+    
+    # Take provided training design matrix and testX and turn them into
+    # matrices of cluster representatives using information from css_results
+    if(trainXProvided){
+        train_X_clusters <- formCssDesign(css_results, weighting, cutoff,
+            min_num_clusts, max_num_clusts, newx=trainX)
+        y_train <- trainY
+
+    } else{
+        train_X_clusters <- formCssDesign(css_results, weighting, cutoff,
+            min_num_clusts, max_num_clusts)
+        y_train <- css_results$y[css_results$train_inds]
+    }
+    
+    stopifnot(length(y_train) == nrow(train_X_clusters))
+
+    testX_clusters <- formCssDesign(css_results, weighting, cutoff,
+        min_num_clusts, max_num_clusts, newx=testX)
+
+    stopifnot(ncol(testX_clusters) == ncol(train_X_clusters))
+
+    clust_X_names <- paste("c_fit_", 1:ncol(testX_clusters), sep="")
+    if(!is.null(colnames(train_X_clusters))){
+        stopifnot(identical(colnames(train_X_clusters), colnames(testX_clusters)))
+        clust_X_names <- colnames(train_X_clusters)
+    }
+
+    if(length(css_results$train_inds) < ncol(train_X_clusters)){
+        err_mess <- paste("css not provided with enough indices to fit OLS model for predictions (number of training indices: ",
+            length(css_results$train_inds), ", number of clusters: ",
+            ncol(train_X_clusters),
+            "). Try reducing number of clusters by increasing cutoff, or re-run css with a larger number of training indices.",
+            sep="")
+        stop(err_mess)
+    }
+
+    # Fit linear model on training data via OLS
+    df <- data.frame(y=y_train, train_X_clusters)
+    colnames(df)[2:ncol(df)] <- clust_X_names
+    model <- lm(y ~., data=df)
+
+    # Use fitted model to generate predictions on testX
+    df_test <- data.frame(testX_clusters)
+    colnames(df_test) <- clust_X_names
+    predictions <- predict(model, newdata=df_test)
+    names(predictions) <- NULL
+
+    # Check output
+    stopifnot(is.numeric(predictions) | is.integer(predictions))
+    stopifnot(length(predictions) == n)
+    stopifnot(all(!is.na(predictions)))
+
+    return(predictions)
+}
+
+#' Obtain a selected set of clusters and features
+#'
+#' Generate sets of selected clusters and features from cluster stability
+#' selection.
+#' @param css_results An object of class "cssr" (the output of the function
+#' css).
+#' @param weighting Character; determines how to calculate the weights for
+#' individual features within the selected clusters. Only those features with
+#' nonzero weight within the selected clusters will be returned. Must be one of
+#' "sparse", "weighted_avg", or "simple_avg'. For "sparse", all the weight is 
+#' put on the most frequently
+#' selected individual cluster member (or divided equally among all the clusters
+#' that are tied for the top selection proportion if there is a tie). For
+#' "weighted_avg", only the features within a selected cluster that were
+#' themselves selected on at least one subsample will have nonzero weight. For
+#' "simple_avg", each cluster member gets equal weight regardless of the
+#' individual feature selection proportions (that is, all cluster members within
+#' each selected cluster will be returned.). See Faletto and Bien (2022) for 
+#' details. Default is "sparse".
+#' @param cutoff Numeric; getCssSelections will select and return only of those
+#' clusters with selection proportions equal to at least cutoff. Must be between
+#' 0 and 1. Default is 0 (in which case either all clusters are selected, or
+#' max_num_clusts are selected, if max_num_clusts is specified).
+#' @param min_num_clusts Integer or numeric; the minimum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns fewer than
+#' min_num_clusts clusters, the cutoff will be increased until at least
+#' min_num_clusts clusters are selected.) Default is 0.
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' max_num_clusts is ignored).
+#' @return A named list with two items. \item{selected_clusts}{A list of
+#' integer vectors; each vector contains the indices of one of the selected
+#' clusters.} \item{selected_feats}{An integer vector; the indices of the
+#' features with nonzero weights from all of the selected clusters.}
+#' @author Gregory Faletto, Jacob Bien
+#' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
+#' \emph{arXiv preprint arXiv:2201.00494}.
+#' \url{https://arxiv.org/abs/2201.00494}.
+#' @export
+getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
+    min_num_clusts=0, max_num_clusts=NA){
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    stopifnot(is.numeric(cutoff) | is.integer(cutoff))
+    stopifnot(length(cutoff) == 1)
+    stopifnot(cutoff >= 0)
+    stopifnot(cutoff <= 1)
+
+    stopifnot(length(weighting)==1)
+    if(!is.character(weighting)){
+        stop("Weighting must be a character")
+    }
+    if(!(weighting %in% c("sparse", "simple_avg", "weighted_avg"))){
+        stop("Weighting must be a character and one of sparse, simple_avg, or weighted_avg")
+    }
+
+    p <- ncol(css_results$feat_sel_mat)
+
+    stopifnot(length(min_num_clusts) == 1)
+    stopifnot(is.numeric(min_num_clusts) | is.integer(min_num_clusts))
+    stopifnot(min_num_clusts == round(min_num_clusts))
+    stopifnot(min_num_clusts >= 0)
+    stopifnot(min_num_clusts <= p)
+
+    stopifnot(length(max_num_clusts) == 1)
+    if(!is.na(max_num_clusts)){
+        stopifnot(is.numeric(max_num_clusts) | is.integer(max_num_clusts))
+        stopifnot(max_num_clusts == round(max_num_clusts))
+        stopifnot(max_num_clusts >= 0)
+        max_num_clusts <- as.integer(min(p, max_num_clusts))
+        max_num_clusts <- as.integer(min(length(css_results$clusters),
+            max_num_clusts))
+        if(max_num_clusts)
+        stopifnot(max_num_clusts >= min_num_clusts)
+    }
+
+    sel_results <- getSelectedClusters(css_results, weighting, cutoff,
+        min_num_clusts, max_num_clusts)
+
+    sel_clust_names <- names(sel_results$selected_clusts)
+
+    stopifnot(all(sel_clust_names %in% names(css_results$clusters)))
+
+    sel_clusts <- list()
+    for(i in 1:length(sel_clust_names)){
+        sel_clusts[[i]] <- css_results$clusters[[sel_clust_names[i]]]
+        names(sel_clusts)[i] <- sel_clust_names[i]
+    }
+
+    return(list(selected_clusts=sel_clusts,
+        selected_feats=sel_results$selected_feats))
+}
+
+#' Print cluster stabilty selection output
+#'
+#' Print a summary of the information from the css function.
+#' @param css_results An object of class "cssr" (the output of the function
+#' css).
+#' @param cutoff Numeric; print.cssr will display only those
+#' clusters with selection proportions equal to at least cutoff. Must be between
+#' 0 and 1. Default is 0 (in which case either all clusters are displayed, or
+#' max_num_clusts are, if max_num_clusts is specified).
+#' @param min_num_clusts Integer or numeric; the minimum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns fewer than
+#' min_num_clusts clusters, the cutoff will be increased until at least
+#' min_num_clusts clusters are selected.) Default is 0.
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' max_num_clusts is ignored).
+#' @return A data.frame; each row contains a cluster, arranged in decreasing
+#' order of cluster selection proportion from top to bottom. The columns are
+#' ClustName (the name of the cluster that was either provided to css or made by
+#' css if no name was provided), ClustProtoName (only returned if the features
+#' have names), the name of the prototype from the cluster, which is the feature
+#' with the greatest individual selection proportion among all the cluster
+#' members (if there is a tie, it is broken by choosing the feature with the
+#' highest correlation with the response), ClustProtoNum (the column number of
+#' the prototype in the X matrix provided to css), and ClustSize (the size of
+#' the cluster).
+#' @author Gregory Faletto, Jacob Bien
+#' @export
+print.cssr <- function(css_results, cutoff=0, min_num_clusts=0,
+    max_num_clusts=NA){
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    stopifnot(is.numeric(cutoff) | is.integer(cutoff))
+    stopifnot(length(cutoff) == 1)
+    stopifnot(cutoff >= 0)
+    stopifnot(cutoff <= 1)
+
+    p <- ncol(css_results$feat_sel_mat)
+
+    stopifnot(length(min_num_clusts) == 1)
+    stopifnot(is.numeric(min_num_clusts) | is.integer(min_num_clusts))
+    stopifnot(min_num_clusts == round(min_num_clusts))
+    stopifnot(min_num_clusts >= 0)
+    stopifnot(min_num_clusts <= p)
+
+    stopifnot(length(max_num_clusts) == 1)
+    if(!is.na(max_num_clusts)){
+        stopifnot(is.numeric(max_num_clusts) | is.integer(max_num_clusts))
+        stopifnot(max_num_clusts == round(max_num_clusts))
+        stopifnot(max_num_clusts >= 0)
+        max_num_clusts <- as.integer(min(p, max_num_clusts))
+        max_num_clusts <- as.integer(min(length(css_results$clusters),
+            max_num_clusts))
+        stopifnot(max_num_clusts >= min_num_clusts)
+    }
+
+    sel_results <- getCssSelections(css_results, cutoff=cutoff,
+        min_num_clusts=min_num_clusts, max_num_clusts=max_num_clusts)
+
+    sel_clusts <- sel_results$selected_clusts
+
+    n_sel_clusts <- length(sel_clusts)
+
+    # Get prototypes (feature from each cluster with highest selection
+    # proportion, breaking ties by using marginal correlations of features with
+    # y from data provided to css)
+    prototypes <- getSelectionPrototypes(css_results, sel_clusts)
+
+    # Cluster selection proportions
+    sel_clust_sel_props <- colMeans(css_results$clus_sel_mat[, names(sel_clusts)])
+
+    # Data.frame: name of cluster, cluster prototype, selection proportion,
+    # cluster size
+
+    if(!is.null(names(prototypes))){
+        print_df <- data.frame(ClustName=names(sel_clusts),
+            ClustProtoName=names(prototypes),
+            ClustProtoNum=unname(prototypes),
+            ClustSelProp=sel_clust_sel_props,
+            ClustSize=lengths(sel_clusts))
+    } else{
+        print_df <- data.frame(ClustName=names(sel_clusts),
+            ClustProtoNum=unname(prototypes),
+            ClustSelProp=sel_clust_sel_props,
+            ClustSize=lengths(sel_clusts))
+    }
+
+    
+
+    print_df <- print_df[order(print_df$ClustSelProp, decreasing=TRUE), ]
+
+    rownames(print_df) <- NULL
+
+    return(print_df)
+}
+
+#' Obtain a design matrix of cluster representatives
+#'
+#' Takes a matrix of observations from the original feature space and returns
+#' a matrix of representatives from the selected clusters based on the results
+#' of cluster stability selection.
+#' @param css_results An object of class "cssr" (the output of the function
+#' css).
+#' @param newX A numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the data that will be used to generate the design matrix of cluster
+#' representatives. Must contain the same features (in the same
+#' number of columns) as the X matrix provided to css, and if the columns of
+#' newX are labeled, the names must match the variable names provided to css.
+#' newX may be omitted if train_inds were provided to css to set aside
+#' observations for model estimation. If this is the case, then when newX is
+#' omitted getCssDesign will return a design matrix of cluster representatives
+#' formed from the train_inds observations from the matrix X provided to css.
+#' (If no train_inds were provided to css, newX must be provided to
+# getCssDesign.) Default is NA.
+#' @param weighting Character; determines how to calculate the weights to
+#' combine features from the selected clusters into weighted averages, called
+#' cluster representatives. Must be one of "sparse", "weighted_avg", or 
+#' "simple_avg'. For "sparse", all the weight is put on the most frequently
+#' selected individual cluster member (or divided equally among all the clusters
+#' that are tied for the top selection proportion if there is a tie). For
+#' "weighted_avg", the weight used for each cluster member is calculated in
+#' proportion to the individual selection proportions of each feature. For
+#' "simple_avg", each cluster member gets equal weight regardless of the
+#' individual feature selection proportions (that is, the cluster representative
+#' is just a simple average of all the cluster members). See Faletto and Bien
+#' (2022) for details. Default is "weighted_avg".
+#' @param cutoff Numeric; getCssDesign will only include those clusters with
+#' selection proportions equal to at least cutoff. Must be between 0 and 1.
+#' Default is 0 (in which case either all clusters are used, or max_num_clusts
+#' are used, if max_num_clusts is specified).
+#' @param min_num_clusts Integer or numeric; the minimum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns fewer than
+#' min_num_clusts clusters, the cutoff will be increased until at least
+#' min_num_clusts clusters are selected.) Default is 0.
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' max_num_clusts is ignored).
+#' @return A design matrix with either nrow(newX) (or length(train_inds), if
+#' train_inds was provided to css and newX was not provided to getCssDesign)
+#' observations and number of columns equal to the number of selected clusters,
+#' containing the cluster representatives for each cluster.
+#' @author Gregory Faletto, Jacob Bien
+#' @export
+getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
+    cutoff=0, min_num_clusts=0, max_num_clusts=NA){
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    newXProvided <- FALSE
+    if(all(!is.na(newX))){
+        if(length(newX) > 1){
+            newXProvided <- TRUE
+            n_train <- nrow(newX)
+            stopifnot(n_train > 1)
+
+            results <- checkXInputResults(newX, css_results$X)
+            newX <- results$newx
+
+            rm(results)
+        } else{
+            stopifnot(all(is.na(newX)))
+            stopifnot(length(newX) == 1)
+
+            if(length(css_results$train_inds) == 0){
+                stop("css was not provided with indices to set aside for model training (train_inds), so must provide newX in order to generate a design matrix")
+            }
+        }
+    } else{
+        stopifnot(all(is.na(newX)))
+        stopifnot(length(newX) == 1)
+
+        if(length(css_results$train_inds) == 0){
+            stop("css was not provided with indices to set aside for model training (train_inds), so must provide newX in order to generate a design matrix")
+        }
+    }
+
+    if(length(css_results$train_inds) == 0){
+        stop("css must be provided with indices to set aside for model training (train_inds) in order to generate predictions")
+    }
+
+    results <- checkXInputResults(newX, css_results$X)
+
+    newX <- results$newx
+    feat_names <- results$feat_names
+    
+    rm(results)
+
+    n <- nrow(newX)
+    p <- ncol(newX)
+
+    stopifnot(is.numeric(cutoff) | is.integer(cutoff))
+    stopifnot(length(cutoff) == 1)
+    stopifnot(cutoff >= 0)
+    stopifnot(cutoff <= 1)
+
+    stopifnot(length(weighting)==1)
+    if(!is.character(weighting)){
+        stop("Weighting must be a character")
+    }
+    if(!(weighting %in% c("sparse", "simple_avg", "weighted_avg"))){
+        stop("Weighting must be a character and one of sparse, simple_avg, or weighted_avg")
+    }
+
+    stopifnot(length(min_num_clusts) == 1)
+    stopifnot(is.numeric(min_num_clusts) | is.integer(min_num_clusts))
+    stopifnot(min_num_clusts == round(min_num_clusts))
+    stopifnot(min_num_clusts >= 0)
+    stopifnot(min_num_clusts <= p)
+
+    stopifnot(length(max_num_clusts) == 1)
+    if(!is.na(max_num_clusts)){
+        stopifnot(is.numeric(max_num_clusts) | is.integer(max_num_clusts))
+        stopifnot(max_num_clusts == round(max_num_clusts))
+        stopifnot(max_num_clusts >= 0)
+        max_num_clusts <- as.integer(min(p, max_num_clusts))
+        max_num_clusts <- as.integer(min(length(css_results$clusters),
+            max_num_clusts))
+        stopifnot(max_num_clusts >= min_num_clusts)
+    }
+
+    # Take provided training design matrix and testX and turn them into
+    # matrices of cluster representatives using information from css_results
+    if(newXProvided){
+        newX_clusters <- formCssDesign(css_results, weighting, cutoff,
+            min_num_clusts, max_num_clusts, newx=newX)
+    } else{
+        newX_clusters <- formCssDesign(css_results, weighting, cutoff,
+            min_num_clusts, max_num_clusts)
+    }
+
+    return(newX_clusters)
+}
+
+#' Obtain a selected set of clusters and features using cluster stability
+#' selection
+#'
+#' Takes in data X and y and returns a set of clusters (and a set of features)
+#' that are useful for predicting y from the data in X. This is a wrapper
+#' function for css and getCssSelections. Using cssSelect is simpler, but it
+#' has fewer options, and it executes the full (computationally expensive)
+#' subsampling procedured every time it is called. In contrast, css can be
+#' called just once, and then cssSelect can quickly return results using
+#' different values of cutoff, max_num_clusts, etc. from the calculations done
+#' in one call to css.
+#' @param X An n x p numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the p >= 2 features/predictors.
+#' @param y A length-n numeric vector containing the responses; y[i] is the
+#' response corresponding to observation X[i, ].
+#' @param clusters Optional; either an integer vector of a list of integer
+#' vectors; each
+#' vector should contain the indices of a cluster of features (a subset of 1:p).
+#' (If there is only one cluster, clusters can either be a list of length 1 or
+#' an integer vector.) All of the provided clusters must be non-overlapping.
+#' Every feature not appearing in any cluster will be assumed to be unclustered
+#' (that is, they  will be treated as if they are in a "cluster" containing only
+#' themselves). If clusters is a list of length 0 (or a list only containing
+#' clusters of length 1), then css() returns the same results as stability
+#' selection (so feat_sel_mat will be identical to clus_sel_mat). Names for
+#' the clusters will be needed later; any clusters that are not given names
+#' in the list clusters will be given names automatically by css. Default is
+#' list() (so no clusters are specified, and every feature is assumed to be in
+#' a "cluster" containng only itself).
+#' @param lambda Optional; the tuning parameter to be used by the lasso for
+#' feature selection in each subsample. If lambda is not provided, cssSelect
+#' will choose one automatically by cross-validation. Default is NA.
+#' @param cutoff Numeric; cssSelect will only select those clusters with
+#' selection proportions equal to at least cutoff. Must be between 0 and 1.
+#' Default is NA (in which case max_num_clusts are used).
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' either cutoff is used to choose the number of clusters, or if cutoff was also
+#' unspecified, cssSelect chooses max_num_clusts by cross-validation).
+#' @return A named list with two items. \item{selected_clusts}{A list of
+#' integer vectors; each vector contains the indices of one of the selected
+#' clusters.} \item{selected_feats}{An integer vector; the indices of the
+#' all of the selected features within all of the selected clusters (typically
+#' only one feature is selected from each cluster).}
+#' @author Gregory Faletto, Jacob Bien
+#' @export
+cssSelect <- function(X, y, clusters = list()
+    , lambda=NA
+    , cutoff=NA
+    , max_num_clusts=NA
+    ){
+
+    if(is.na(lambda)){
+        lambda <- getLassoLambda(X, y)
+    }
+
+    # Inputs will be checked by called functions
+    css_results <- css(X, y, lambda, clusters)
+
+    # If no indication of how to select model size was provided, choose model
+    # size by cross-validation
+    if(is.na(cutoff) & is.na(max_num_clusts)){
+        max_num_clusts <- getModelSize(X, y, clusters)
+    }
+
+    if(is.na(cutoff)){
+        cutoff <- 0
+    }
+
+    # Get selected features
+    getCssSelections(css_results, weighting="sparse", cutoff=cutoff,
+        min_num_clusts=0, max_num_clusts=max_num_clusts)
+}
+
+#' Wrapper function to generate predictions from cluster stability selected
+#' model in one step
+#'
+#' Select clusters using cluster stability selection, form cluster
+#' representatives, fit a linear model, and generate predictions from a matrix
+#' of unlabeled data. This is a wrapper function for css and getCssPreds. Using
+#' cssPredict is simpler, but it
+#' has fewer options, and it executes the full (computationally expensive)
+#' subsampling procedured every time it is called. In contrast, css can be
+#' called just once, and then cssPredict can quickly return results for
+#' different matrices of new data or using different values of cutoff,
+#' max_num_clusts, etc. by using the calculations done
+#' in one call to css.
+#'
+#' @param X_train An n x p numeric matrix (preferably) or a data.frame (which
+#' will be coerced internally to a matrix by the function model.matrix) containing
+#' the p >= 2 features/predictors. The data from X_train and y_train will be
+#' split into two parts; half of the data will be used for feature selection by
+#' cluster stability selection, and half will be used for estimating a linear
+#' model on the selected cluster representatives.
+#' @param y_train A length-n numeric vector containing the responses; y[i] is the
+#' response corresponding to observation X[i, ].
+#' @param X_predict A numeric matrix (preferably) or a data.frame (which will
+#' be coerced internally to a matrix by the function model.matrix) containing
+#' the data that will be used to generate predictions. Must contain the same
+#' features (in the same number of columns) as X_train, and if the columns of
+#' X_predict are named, they must match the names of X_train.
+#' @param clusters Optional; either an integer vector of a list of integer
+#' vectors; each
+#' vector should contain the indices of a cluster of features (a subset of 1:p).
+#' (If there is only one cluster, clusters can either be a list of length 1 or
+#' an integer vector.) All of the provided clusters must be non-overlapping.
+#' Every feature not appearing in any cluster will be assumed to be unclustered
+#' (that is, they  will be treated as if they are in a "cluster" containing only
+#' themselves). If clusters is a list of length 0 (or a list only containing
+#' clusters of length 1), then css() returns the same results as stability
+#' selection (so feat_sel_mat will be identical to clus_sel_mat). Names for
+#' the clusters will be needed later; any clusters that are not given names
+#' in the list clusters will be given names automatically by css. Default is
+#' list() (so no clusters are specified, and every feature is assumed to be in
+#' a "cluster" containng only itself).
+#' @param lambda Optional; the tuning parameter to be used by the lasso for
+#' feature selection in each subsample. If lambda is not provided, cssPredict
+#' will choose one automatically by cross-validation. Default is NA.
+#' @param cutoff Numeric; getCssPreds will make use only of those clusters with
+#' selection proportions equal to at least cutoff. Must be between 0 and 1.
+#' Default is 0 (in which case either all clusters are used, or max_num_clusts
+#' are used, if max_num_clusts is specified).
+#' @param max_num_clusts Integer or numeric; the maximum number of clusters to
+#' use regardless of cutoff. (That is, if the chosen cutoff returns more than
+#' max_num_clusts clusters, the cutoff will be decreased until at most
+#' max_num_clusts clusters are selected.) Default is NA (in which case
+#' max_num_clusts is ignored).
+#' @param train_inds Optional; an integer or numeric vector containing the
+#' indices of observations in X and y to set aside for model training after 
+#' feature selection. If train_inds is not provided, half of the data will be
+#' used for feature selection and half for model estimation (chosen at random).
+#' @return A numeric vector of length nrow(X_predict) of predictions
+#' corresponding to the observations from X_predict.
+#' @author Gregory Faletto, Jacob Bien
+#' @export
+cssPredict <- function(X_train, y_train, X_predict, clusters = list()
+    , lambda=NA
+    , cutoff=NA
+    , max_num_clusts=NA
+    , train_inds=NA
+    ){
+
+    # Inputs will be checked by called functions
+
+    n <- nrow(X_train)
+
+    if(any(is.na(train_inds))){
+        train_inds <- sample(n, size=round(n/2))
+    }
+
+    if(any(is.na(lambda))){
+        lambda <- getLassoLambda(X_train[setdiff(1:n, train_inds), ],
+            y_train[setdiff(1:n, train_inds)])
+    }
+
+    css_results <- css(X_train, y_train, lambda, clusters,
+        train_inds=train_inds)
+
+    # If no indication of how to select model size was provided, choose model
+    # size by cross-validation
+    if(is.na(cutoff) & is.na(max_num_clusts)){
+        max_num_clusts <- getModelSize(X_train[train_inds, ],
+            y_train[train_inds], clusters)
+    }
+
+    if(is.na(cutoff)){
+        cutoff <- 0
+    }
+
+    # Get predictions
+    getCssPreds(css_results, testX = X_predict, weighting="weighted_avg",
+    	cutoff=cutoff, max_num_clusts=max_num_clusts)
+}
+
+#
+#
+#
+#
+#
+#
+# helper functions
+#
+#
+#
+#
+#
+#
+#
+
+createSubsamples <- function(n, p, B, sampling_type, prop_feats_remove=0){
+    # Creates lists of subsamples for stability selection.
+
+    # Inputs:
+
+    # n
+    # Integer or numeric; sample size of the data set.
+
+    # p
+    # Integer or numeric; number of features.
+
+    # B   
+    # Integer or numeric; the number of subsamples. Note: For saampling.type=="MB" the
+    # number of lasso fits will be B; for sampling_type="SS" the number of 
+    # lasso fits will be 2*B.
+
+    # sampling_type   
+    # A character vector (either "SS" or "MB"); the sampling type used for 
+    # stability selection.
+
+    # num_feats_remove
+    # Integer; number of features select automatically on every
+    # iteration. Determined earlier from input prop_feats_remove to css.
+
+    # Check inputs
+
+    stopifnot(length(n) == 1)
+    stopifnot(is.numeric(n) | is.integer(n))
+    stopifnot(n == round(n))
+    stopifnot(n > 0)
+
+    stopifnot(length(p) == 1)
+    stopifnot(is.numeric(p) | is.integer(p))
+    stopifnot(p == round(p))
+    stopifnot(p > 0)
+
+    stopifnot(length(B) == 1)
+    stopifnot(is.numeric(B) | is.integer(B))
+    stopifnot(B == round(B))
+    stopifnot(B > 0)
+
+    stopifnot(is.character(sampling_type))
+    stopifnot(length(sampling_type) == 1)
+    stopifnot(sampling_type %in% c("SS", "MB"))
+
+    stopifnot(length(prop_feats_remove) == 1)
+    stopifnot(is.numeric(prop_feats_remove) | is.integer(prop_feats_remove))
+    stopifnot(prop_feats_remove >= 0 & prop_feats_remove < 1)
+    if(prop_feats_remove > 0){
+        # Make sure p is at least 2 or else this doesn't make sense
+        stopifnot(p >= 2)
+    }
+
+    if(prop_feats_remove == 0){
+        subsamples <- getSubsamps(n, B, sampling_type)
+        return(subsamples)
+    } else{
+        # In this case, we generate subsamples as well as logical vectors
+        # of features to keep
+        subsamps_and_feats <- list()
+        subsamples <- getSubsamps(n, B, sampling_type)
+        for(i in 1:B){
+            # Logical p-vector, where each entry is TRUE with probability
+            # 1 - prop_feats_remove
+            feats_to_keep_i <- as.logical(rbinom(n=p, size=1,
+                prob=1 - prop_feats_remove))
+            # Make sure at least two entries are equal to TRUE (so that at
+            # least two features are present for every subsample)--if not,
+            # randomly choose features to add
+            while(sum(feats_to_keep_i) < 2){
+                false_inds <- which(!feats_to_keep_i)
+                sel_feat <- sample(false_inds, size=1)
+                feats_to_keep_i[sel_feat] <- TRUE
+            }
+            subsamps_and_feats[[i]] <- list(subsample=subsamples[[i]],
+                feats_to_keep=feats_to_keep_i)
+        }
+
+        if(sampling_type=="SS"){
+            stopifnot(length(subsamples) == 2*B)
+            for(i in 1:B){
+                # Keep the same features as in the other subsample (this
+                # ensures that the theoretical guarantee of Shah and Samworth
+                # 2013 remains valid on every individual pair of subsamples)
+                subsamps_and_feats[[B + i]] <- list(subsample=subsamples[[i]],
+                    feats_to_keep=subsamps_and_feats[[i]]$feats_to_keep)
+            }
+        }
+
+        # Check output
+        stopifnot(all(names(subsamps_and_feats) == c("subsample",
+            "feats_to_keep")))
+
+        return(subsamps_and_feats)
+    }
+    # Shouldn't be possible to reach this part of function
+    stop("createSubsamples failed to return anything")
+}
+
+
+getSubsamps <- function(n, B, sampling_type){
+    # Generate list of B (or 2*B for sampling_type="SS") subsamples of size n/2
+    subsamples <- list()
+    for(i in 1:B){
+        subsamples[[i]] <- sort(sample.int(n=n, size=floor(n/2),
+            replace=FALSE))
+    }
+    stopifnot(length(subsamples) == B)
+    if(sampling_type=="SS"){
+        for(i in 1:B){
+            # For the ith entry, take a subsample of size floor(n/2) from the
+            # remaining n - floor(n/2) observations. (Only necessary to actually
+            # take the subsample if n is odd; if not, the set we want is
+            # setdiff(1:n, subsamples[[i]]), so skip the sample function.)
+            if(n/2 == floor(n/2)){
+                subsamples[[B + i]] <- sort(setdiff(1:n, subsamples[[i]]))
+            } else{
+                subsamples[[B + i]] <- sort(sample(x=setdiff(1:n,
+                    subsamples[[i]]), size=floor(n/2), replace=FALSE))
+            }
+
+            # Check output
+
+            stopifnot(is.integer(subsamples[[B + i]]))
+            stopifnot(all(subsamples[[B + i]] ==
+                round(subsamples[[B + i]])))
+            stopifnot(floor(n/2) == length(subsamples[[B + i]]))
+            stopifnot(length(subsamples[[B + i]]) ==
+                length(unique(subsamples[[B + i]])))
+        }
+    }
+    stopifnot(length(subsamples) == 2*B)
+    return(subsamples)
+}
+
+getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
+    fitfun=cssLasso){
+    # Generates matrix of selection indicators from stability selection.
+
+    # Inputs
+
+    # x   
+    # an n x p numeric matrix or a data.frame containing the predictors.
+
+    # y   
+    # A response; can be any response that takes the form of an n-dimensional
+    # vector and is used (or not used) by fitfun.
+    # Typically (and for default fitfun = cssLasso), y should be an n-dimensional
+    # numeric vector containing the response.
+
+    # lambda
+    # A tuning parameter or set of tuning parameters that may be used by
+    # the feature selection method. For example, in the default case when
+    # fitfun = cssLasso, lambda is a numeric: the penalty to use for each lasso
+    # fit.
+
+    # B   
+    # Integer or numeric; the number of subsamples. Note: For saampling.type=="MB" the
+    # number of lasso fits will be B; for sampling_type="SS" the number of 
+    # lasso fits will be 2*B.
+
+    # sampling_type   
+    # A character vector (either "SS" or "MB"); the sampling type used for 
+    # stability selection.
+
+    # subsamps object
+    # 
+    # A list of length B (or 2*B if sampling_type="SS"), where each element
+    # is one of the following:
+    # 
+    # subsample: An integer vector of size n/2 containing the indices of the
+    # observations in the subsample.
+    # 
+    # OR:
+    # 
+    # drop_var_input: A named list containing two elements: one named "subsample"
+    # and the same as the previous description, and a logical vector named
+    # "feats_to_keep" containing the indices of the features to be automatically
+    # selected.
+
+    # fitfun
+    # A function that takes in arguments X, y, and lambda and returns a vector
+    # of indices of the columns of X (selected features).
+
+    # Output
+
+    # res
+    # A binary integer matrix of dimension B x p (if sampling_type == "MB") or
+    # 2*B x p (if sampling_type == "SS"). res[i, j] = 1 if feature j was
+    # selected on subsample i and equals 0 otherwise.
+
+    # Check inputs
+
+    stopifnot(is.matrix(x))
+    stopifnot(all(!is.na(x)))
+
+    n <- nrow(x)
+    p <- ncol(x)
+
+    stopifnot(length(y) == n)
+    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # inputs should be checked within fitfun.
+
+    stopifnot(length(B) == 1)
+    stopifnot(is.numeric(B) | is.integer(B))
+    stopifnot(B == round(B))
+    stopifnot(B > 0)
+
+    stopifnot(is.character(sampling_type))
+    stopifnot(length(sampling_type) == 1)
+    stopifnot(sampling_type %in% c("SS", "MB"))
+
+    # Get list of selected feature sets from subsamples
+
+    res_list <- mclapply(X=subsamps_object, FUN=cssLoop, x=x, y=y,
+        lambda=lambda, fitfun=fitfun, mc.cores=detectCores())
+
+    # Store selected sets in B x p (or 2*B x p for "SS") binary matrix
+    if(sampling_type=="SS"){
+        res <- matrix(0L, 2*B, p)
+    } else if(sampling_type=="MB"){
+        res <- matrix(0L, B, p)
+    } else{
+        stop("!(sampling_type %in% c(SS, MB)) (don't know how to set dimensions of res")
+    }
+
+    stopifnot(length(res_list) == nrow(res))
+
+    # Get selected sets into matrix res
+
+    for(i in 1:nrow(res)){
+        if(length(res_list[[i]]) == 0){
+            # If no features are selected, don't fill in anything in this row
+            next
+        }
+
+        if(!is.integer(res_list[[i]])){
+            stop("Something seems to be wrong with the feature selection method (fitfun failed to return an integer vector)")
+        }
+        stopifnot(length(res_list[[i]]) <= p & length(res_list[[i]]) > 0)
+        stopifnot(all(!is.na(res_list[[i]])))
+        stopifnot(max(res_list[[i]]) <= p)
+        stopifnot(min(res_list[[i]]) >= 1)
+        stopifnot(length(res_list[[i]]) == length(unique(res_list[[i]])))
+        stopifnot(!("try-error" %in% class(res_list[[i]]) |
+            "error" %in% class(res_list[[i]]) |
+            "simpleError" %in% class(res_list[[i]]) |
+            "condition" %in% class(res_list[[i]])))
+
+        # Store selected variables in the ith row of res
+        res[i, res_list[[i]]] <- 1L
+    }
+
+    # Check output
+
+    stopifnot(is.matrix(res))
+    if(sampling_type=="SS"){
+        stopifnot(nrow(res) == 2*B)
+    } else{
+        stopifnot(nrow(res) == B)
+    }
+    stopifnot(ncol(res) == p)
+    stopifnot(all(res %in% c(0, 1)))
+
+    return(res)
+
+}
+
+cssLoop <- function(input, x, y, lambda, fitfun){
+    # Function that runs feature selection method fitfun on each subsample for
+    # cluster stability selection (called within mcapply).
+
+    # Inputs:
+
+    # input
+    # Could be one of two things:
+    # subsample: An integer vector of size n/2 containing the indices of the
+    # observations in the subsample.
+    # drop_var_input: A named list containing two elements: one named "subsample"
+    # and the same as the previous description, and a logical vector named
+    # "feats_to_keep" containing the indices of the features to be automatically
+    # selected.
+
+    # x   
+    # an n x p numeric matrix containing the predictors. (This should be the
+    # full design matrix provided to css.)
+
+    # y   
+    # A response; can be any response that takes the form of an n-dimensional
+    # vector and is used (or not used) by fitfun.
+    # Typically (and for default fitfun = cssLasso), y should be an n-dimensional
+    # numeric vector containing the response. This should be the full response
+    # provided to css.
+
+    # lambda
+    # A tuning parameter or set of tuning parameters that may be used by
+    # the feature selection method. For example, in the default case when
+    # fitfun = cssLasso, lambda is a numeric: the penalty to use for each lasso
+    # fit.
+
+    # fitfun
+    # A function that takes in arguments X, y, and lambda and returns a vector
+    # of indices of the columns of X (selected features).
+
+    # Output:
+
+    # selected: integer vector; the indices of the features selected by the
+    # lasso.
+
+    # Check inputs
+    stopifnot(is.matrix(x))
+    stopifnot(all(!is.na(x)))
+
+    colnames(x) <- character()
+    n <- nrow(x)
+    p <- ncol(x)
+
+    stopifnot(length(y) == n)
+    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # inputs should be checked within fitfun.
+
+    if(!is.list(input)){
+        subsample <- input
+        feats_to_keep <- rep(TRUE, p)
+    } else{
+        stopifnot(all(names(input) == c("subsample", "feats_to_keep")))
+        subsample <- input$subsample
+        feats_to_keep <- input$feats_to_keep
+    }
+        
+    stopifnot(is.integer(subsample))
+    stopifnot(all(subsample == round(subsample)))
+    stopifnot(floor(n/2) == length(subsample))
+    stopifnot(length(subsample) == length(unique(subsample)))
+
+    stopifnot(is.logical(feats_to_keep))
+    stopifnot(length(feats_to_keep) == p)
+
+    selected <- do.call(fitfun, list(X=x[subsample, feats_to_keep],
+        y=y[subsample], lambda=lambda))
+
+    # Check output
+
+    if(!exists("selected")){
+        stop("The provided feature selection method fitfun failed to return anything on (at least) one subsample")
+    }
+    if(!is.integer(selected) & !is.numeric(selected)){
+        stop("The provided feature selection method fitfun failed to return an integer or numeric vector on (at least) one subsample")
+    }
+    if(!all(selected == round(selected))){
+        stop("The provided feature selection method fitfun failed to return a vector of valid (integer) indices on (at least) one subsample")
+    }
+    if(any(is.na(selected))){
+        stop("The provided feature selection method fitfun returned a vector containing NA values on (at least) one subsample")
+    }
+    if(length(selected) != length(unique(selected))){
+        stop("The provided feature selection method fitfun returned a vector of selected features containing repeated indices on (at least) one subsample")
+    }
+    if(length(selected) > p){
+        stop("The provided feature selection method fitfun returned a vector of selected features longer than p on (at least) one subsample")
+    }
+    if(max(selected) > p){
+        stop("The provided feature selection method fitfun returned a vector of selected features containing an index greater than ncol(X) on (at least) one subsample")
+    }
+    if(min(selected) <= 0){
+        stop("The provided feature selection method fitfun returned a vector of selected features containing a non-positive index on (at least) one subsample")
+    }
+    if("try-error" %in% class(selected) |
+        "error" %in% class(selected) | "simpleError" %in% class(selected) |
+        "condition" %in% class(selected)){
+        stop("The provided feature selection method fitfun returned an error on (at least) one subsample")
+    }
+
+    return(as.integer(selected))
+}
+
+cssLasso <- function(X, y, lambda){
+    # Check inputs
+
+    n <- nrow(X)
+    p <- ncol(X)
+
+    if(!is.numeric(y)){
+        stop("For method cssLasso, y must be a numeric vector.")
+    }
+    if(n != length(y)){
+        stop("For method cssLasso, y must be a vector of length equal to nrow(X).")
+    }
+    # stopifnot(all(!is.na(y)))
+    if(length(unique(y)) <= 1){
+        stop("Subsample with only one unique value of y detected--for method cssLasso, all subsamples of y of size floor(n/2) must have more than one unique value.")
+    }
+
+    if(length(lambda) != 1){
+        stop("For method cssLasso, lambda must be a numeric of length 1.")
+    }
+    if(!is.numeric(lambda) & !is.integer(lambda)){
+        stop("For method cssLasso, lambda must be a numeric.")
+    }
+    if(lambda < 0){
+        stop("For method cssLasso, lambda must be nonnegative.")
+    }
+
+    # Fit a lasso path (full path for speed, per glmnet documentation)
+
+    lasso_model <- glmnet(X, y, family="gaussian")
+    stopifnot(all.equal(class(lasso_model), c("elnet", "glmnet")))
+
+    # Get coefficients at desired lambda
+
+    pred <- predict(lasso_model, type="nonzero", s=lambda, exact=TRUE, x=X, y=y)
+
+    if(is.null(pred[[1]])){return(integer())}
+
+    stopifnot(is.data.frame(pred))
+
+    stopifnot(!("try-error" %in% class(pred) | "error" %in% class(pred) |
+        "simpleError" %in% class(pred) | "condition" %in% class(pred)))
+
+    if(length(dim(pred)) == 2){
+        selected_glmnet <- pred[, 1]
+    } else if(length(dim(pred)) == 3){
+        selected_glmnet <- pred[, 1, 1]
+    } else if(length(dim(pred)) == 1){
+        selected_glmnet <- pred
+    } else{
+        stop("length(dim(pred)) not 1, 2, or 3")
+    }
+
+    stopifnot(length(selected_glmnet) >= 1)
+    stopifnot(length(selected_glmnet) <= ncol(X))
+    stopifnot(all(selected_glmnet == round(selected_glmnet)))
+    stopifnot(length(selected_glmnet) == length(unique(selected_glmnet)))
+    selected_glmnet <- as.integer(selected_glmnet)
+
+    selected <- sort(selected_glmnet)
+    
+
+    return(selected)
+}
+
+formatClusters <- function(clusters=NA, p=-1, clust_names=NA, R=NA,
+    get_prototypes=FALSE, x=NA, y=NA){
+    # Takes in clusters or matrix R and outputs list of feature clusters.
+    # Optionally, can use_R
+    # identify prototypes from each cluster (the feature within each cluster 
+    # most correlated with the response) if X and y are provided.
+
+    # Identify clustered features: row i in R contains all the features
+    # that are in a cluster with feature i, so come up with a list containing
+    # all the clusters and then remove the repeats
+
+    # Inputs:
+
+    # clusters
+    # Either an integer vector of a list of integer vectors; each vector should
+    # contain the indices of a
+    # cluster of features. (If there is only one cluster, clusters can either
+    # be a list of length 1 or simply an integer vector.) If clusters is
+    # specified then R is ignored.
+
+    # clust_names
+    # A character vector of the names of the clusters in clusters.
+
+    # R
+    # Numeric p x p matrix; entry ij contains the "substitutive value" of 
+    # feature i for feature j (diagonal must consist of ones, all entries must be between 0 and 1, and matrix must
+    # be symmetric)
+
+    # get_prototypes
+    # Logical: if TRUE, will identify prototype from each cluster (the feature
+    # from each cluster that is most correlated with the response) for the
+    # protolasso. In this case, x and y must be provided.
+
+    # x
+    # Design matrix of numerics; only needs to be provided if get_prototypes is
+    # TRUE.
+
+    # y
+    # Numeric response vector; only needs to be provided if get_prototypes is
+    # TRUE.
+
+    # Output
+
+    # A list with the following elements:
+
+    # clusters: A list where each entry is an integer vector of indices of features that
+    # are in a common cluster. (The length of list clusters is equal to the
+    # number of clusters.) All identified clusters are non-overlapping. Any
+    # clusters of size 1 are removed from the input, and only clusters of size
+    # 2 or larger are returned.
+
+    # multiple: logical; TRUE if there is more than one cluster of size greater
+    # than 1, FALSE otherwise.
+
+    # prototypes: only returned if get_prototypes=TRUE. An integer vector whose
+    # length is equal to the number of clusters. Entry i is the index of the
+    # feature belonging to cluster i that is most highly correlated with y
+    # (that is, the prototype for the cluster; see function protolasso for 
+    # details).
+
+    # Check inputs
+
+    if(any(is.na(clusters)) & any(is.na(R))){
+        stop("Must specify one of clusters or R.")
+    }
+
+    stopifnot(is.integer(p) | is.numeric(p))
+    stopifnot(length(p) == 1)
+    stopifnot(p == round(p))
+    if(p > 0){
+        stopifnot(p >= 2)
+    }
+
+    use_R <- FALSE
+    if(any(is.na(clusters)) | length(clusters) == 0){
+        if(all(!is.na(R))){
+            stopifnot(is.matrix(R))
+            stopifnot(all(dim(R) == p))
+            stopifnot(all(diag(R) == 1))
+            stopifnot(identical(R, t(R)))
+            stopifnot(all(!is.na(R)))
+            stopifnot(all(R %in% c(0, 1)))
+            use_R <- TRUE
+        }
+    } else{
+        stopifnot(!is.list(clusters) | all(lengths(clusters) >= 1))
+        stopifnot(is.list(clusters) | length(clusters) >= 1)
+        stopifnot(all(!is.na(clusters)))
+
+        if(is.list(clusters) & length(clusters) > 0){
+            for(i in 1:length(clusters)){
+                stopifnot(length(clusters[[i]]) == length(unique(clusters[[i]])))
+                stopifnot(all(!is.na(clusters[[i]])))
+                stopifnot(is.integer(clusters[[i]]))
+            }
+
+            stopifnot(length(clusters) == length(unique(clusters)))
+
+            clusters <- clusters[!duplicated(clusters)]
+
+            if(length(clusters) >= 2){
+                # Check that clusters are non-overlapping
+                for(i in 1:(length(clusters) - 1)){
+                    for(j in (i+1):length(clusters)){
+                        stopifnot(length(intersect(clusters[[i]],
+                            clusters[[j]])) == 0)
+                    }
+                }
+            }
+
+            if(any(!is.na(clust_names))){
+                stopifnot(length(clust_names) == length(clusters))
+            }
+        } else if(!is.list(clusters)){
+            clusters_temp <- clusters
+            clusters <- list()
+            clusters[[1]] <- clusters_temp
+            rm(clusters_temp)
+
+        }
+    }
+
+    stopifnot(length(get_prototypes) == 1)
+    stopifnot(is.logical(get_prototypes))
+
+    if(any(!is.na(clust_names))){
+        stopifnot(is.character(clust_names))
+    }
+
+    if(get_prototypes){
+        stopifnot(all(!is.na(x)))
+        stopifnot(is.matrix(x))
+        
+        n <- nrow(x)
+        p <- ncol(x)
+
+        stopifnot(all(!is.na(y)))
+        stopifnot(is.numeric(y) | is.integer(y))
+        stopifnot(length(unique(y)) > 1)
+        stopifnot(n == length(y))
+    }
+
+    if(use_R){
+        # Determine clusters from R
+        clusters <- list()
+
+        for(i in 1:nrow(R)){
+            clusters[[i]] <- as.integer(which(R[i, ] > 0))
+            stopifnot(length(clusters[[i]]) == length(unique(clusters[[i]])))
+            stopifnot(all(!is.na(clusters[[i]])))
+            stopifnot(is.integer(clusters[[i]]))
+        }
+
+        clusters <- unique(clusters)
+        stopifnot(is.list(clusters))
+
+        if(length(clusters) >= 2){
+            # Check that clusters are non-overlapping
+            for(i in 1:(length(clusters) - 1)){
+                for(j in (i+1):length(clusters)){
+                    if(length(intersect(clusters[[i]], clusters[[j]])) != 0){
+                        stop("Invalid R matrix with overlapping clusters (clusters must not be overlapping)")
+                    }
+                }
+            }
+        }
+    }
+    
+    multiple <- FALSE
+
+    stopifnot(is.list(clusters))
+
+    if(any(lengths(clusters) > 1)){ # & length(clusters) > 1
+        
+        # Only care about clusters with more than one element (only ones that need
+        # to be treated differently)
+        # keep track of whether there's more than one cluster or not
+        multiple <- sum(lengths(clusters) > 1) > 1
+    }
+
+    # For any features not already in a cluster, add a cluster containing only
+    # that feature
+    orig_length_clusters <- length(clusters)
+    for(i in 1:p){
+        feat_i_found <- FALSE
+        if(orig_length_clusters > 0){
+            for(j in 1:orig_length_clusters){
+                # If i is in cluster j, break out of this loop and consider the
+                # next i
+                if(i %in% clusters[[j]]){
+                    feat_i_found <- TRUE
+                    break
+                }
+            }
+        }
+        
+        # If feature i wasn't found in any cluster, add a cluster containing
+        # just feature i
+        if(!feat_i_found){
+            clusters[[length(clusters) + 1]] <- i
+        }
+    }
+
+    n_clusters <- length(clusters)
+
+    # Add names to clusters
+    if(is.null(names(clusters))){
+        names(clusters) <- paste("c", 1:n_clusters, sep="")
+    } else{
+        # What clusters need names?
+        unnamed_clusts <- which(is.na(names(clusters)) | names(clusters) == "")
+        proposed_clust_names <- paste("c", unnamed_clusts, sep="")
+        # Replace any proposed cluster names that are already in use
+        if(any(proposed_clust_names %in% names(clusters))){
+            proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste("c",
+                unnamed_clusts[proposed_clust_names %in% names(clusters)] + p, sep="")
+        }
+        while_counter <- 0
+        while(any(proposed_clust_names %in% names(clusters))){
+            proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste(proposed_clust_names[proposed_clust_names %in% names(clusters)],
+                "_1", sep="")
+            while_counter <- while_counter + 1
+            if(while_counter >= 100){
+                stop("Function formatClusters stuck in an infinite while loop")
+            }
+        }
+        stopifnot(length(unnamed_clusts) == length(proposed_clust_names))
+        names(clusters)[unnamed_clusts] <- proposed_clust_names
+    }
+
+    # Check output
+
+    stopifnot(all(lengths(clusters) >= 1))
+    stopifnot(is.list(clusters))
+    stopifnot(all(!is.na(clusters)))
+    stopifnot(length(clusters) == length(unique(clusters)))
+
+    stopifnot(!is.null(names(clusters)))
+    stopifnot(all(!is.na(names(clusters)) & names(clusters) != ""))
+    stopifnot(length(unique(names(clusters))) == length(clusters))
+
+    stopifnot(is.logical(multiple))
+    stopifnot(length(multiple) == 1)
+    stopifnot(!is.na(multiple))
+
+    if(get_prototypes){
+        prototypes <- getPrototypes(clusters, x, y)
+
+        stopifnot(is.integer(prototypes))
+        if(is.list(clusters)){
+            stopifnot(length(prototypes) == length(clusters))
+        } else{
+            stopifnot(length(prototypes) == 1)
+        }
+        
+        stopifnot(all(!is.na(prototypes)))
+        stopifnot(length(prototypes) == length(unique(prototypes)))
+
+        return(list(clusters=clusters, multiple=multiple,
+            prototypes=prototypes))
+    } else{
+        return(list(clusters=clusters, multiple=multiple))
+    }
+}
+
+getPrototypes <- function(clusters, x, y){
+    # Takes in list of clusters, x, and y and returns an integer vector (of
+    # length equal to the number of clusters) of the indices of the feature
+    # prototypes (the features from each cluster most correlated with the
+    # response).
+
+    # Check inputs
+
+    stopifnot(!is.list(clusters) | all(lengths(clusters) >= 1))
+    stopifnot(is.list(clusters) | length(clusters) >= 1)
+
+    stopifnot(all(!is.na(x)))
+    stopifnot(is.matrix(x))
+
+    n <- nrow(x)
+    p <- ncol(x)
+
+    stopifnot(all(!is.na(y)))
+    stopifnot(is.numeric(y) | is.integer(y))
+    stopifnot(n == length(y))
+
+    # Identify prototypes
+    if(length(clusters) > 0){
+        if(is.list(clusters)){
+            prototypes <- rep(as.integer(NA), length(clusters))
+            for(i in 1:length(clusters)){
+                prototypes[i] <- identifyPrototype(clusters[[i]], x, y)
+            }
+        } else{
+            # If clusters is not a list, then there is only one cluster.
+            prototypes <- identifyPrototype(clusters, x, y)
+        }
+    }  else{
+        prototypes <- integer()
+    }
+
+    # Check output
+
+    stopifnot(is.integer(prototypes))
+    if(length(clusters) > 0){
+        if(is.list(clusters)){
+            stopifnot(length(prototypes) == length(clusters))
+        } else {
+            stopifnot(length(prototypes) == 1)
+        }
+    } else{
+        stopifnot(length(prototypes) == 0)
+    }
+    
+    stopifnot(all(!is.na(prototypes)))
+    stopifnot(length(prototypes) == length(unique(prototypes)))
+
+    return(prototypes)
+}
+
+identifyPrototype <- function(cluster_members_i, x, y){
+    # Given a cluster of features, x, and y, identifies the prototype.
+
+    # Check input
+    stopifnot(is.integer(cluster_members_i))
+    # If cluster only has one member, that member is the prototype
+    if(length(cluster_members_i) == 1){
+        return(cluster_members_i)
+    }
+    stopifnot(length(cluster_members_i) > 1)
+    
+
+    # Choose which cluster member to represent cluster for stability
+    # metric purposes by choosing the one most highly correlated 
+    # with y
+
+    cors_i <- apply(x[, cluster_members_i], 2, cor_function, y=y)
+    max_index_i <- which.max(cors_i)[1]
+
+    stopifnot(length(max_index_i) == 1)
+    stopifnot(max_index_i %in% 1:length(cluster_members_i))
+
+    ret <- cluster_members_i[max_index_i]
+
+    # Check output
+
+    stopifnot(is.integer(ret))
+    stopifnot(length(ret) == 1)
+    stopifnot(ret %in% cluster_members_i)
+    stopifnot(identical(x[, cluster_members_i][, max_index_i],
+        x[, ret]))
+
+    return(ret)
+}
+
+getClusterProps <- function(clusters, res, sampling_type){
+    # res is a B x p (or 2*B x p for "SS") integer matrix. Each row of res 
+    # is a selected set (res_ij is 1 if feature j was selected on resample i and
+    # 0 if not).
+
+    # Check input
+
+    stopifnot(is.matrix(res))
+    stopifnot(all(res %in% c(0, 1)))
+    p <- ncol(res)
+    if(sampling_type=="SS"){
+        B <- nrow(res)/2
+        stopifnot(B == round(B))
+    } else{
+        B <- nrow(res)
+    }
+    stopifnot(B > 0)
+
+    n_clusters <- length(clusters)
+    stopifnot(!is.null(names(clusters)))
+    stopifnot(is.character(names(clusters)))
+    stopifnot(all(!is.na(names(clusters)) & names(clusters) != ""))
+    stopifnot(length(unique(names(clusters))) == n_clusters)
+
+    # Calculate feat_sel_props
+    feat_sel_props <- colMeans(res)
+
+    # Matrix of cluster selection proportions (with p columns)
+    res_clus_p <- res
+
+    # Matrix of cluster selection proportions (with n_clusters columns)
+    res_n_clusters <- matrix(rep(0L, nrow(res)*n_clusters), nrow=nrow(res),
+        ncol=n_clusters)
+    colnames(res_n_clusters) <- names(clusters)
+
+    stopifnot(is.list(clusters))
+    stopifnot(all(lengths(clusters) >= 1))
+    stopifnot(all(!is.na(clusters)))
+    stopifnot(n_clusters == length(unique(clusters)))
+
+    for(j in 1:n_clusters){
+        # Identify rows of res where at least one feature from this cluster
+        # was selected
+        rows_j_sel <- apply(res, 1, function(x){any(x[clusters[[j]]] == 1)})
+
+        # Put ones in these rows of res_n_clusters[, j]
+        res_n_clusters[rows_j_sel, j] <- 1L
+
+        if(length(clusters[[j]]) <= 1){
+            next
+        }
+        
+        # Set all cluster members in these rows equal to 1 in res_clus_p
+        res_clus_p[rows_j_sel, clusters[[j]]] <- 1
+
+        # Confirm that all columns in res_clus_p corresponding to
+        # clusters[[j]] have the same values
+        stopifnot(all(apply(res_clus_p[, clusters[[j]]], 1,
+            function(x){length(unique(x)) == 1})))
+    }
+
+    # Check output
+    stopifnot(is.matrix(res_clus_p))
+    stopifnot(all.equal(dim(res), dim(res_clus_p)))
+    stopifnot(all(res_clus_p %in% c(0, 1)))
+ 
+    # For every cluster, confirm that all columns in res_clus_p corresponding
+    # to that cluster are identical (that is, every row in the submatrix
+    # res_clus_p[, clusters[[j]]] has only one unique value)
+    for(j in 1:n_clusters){
+        if(length(clusters[[j]]) > 1){
+            stopifnot(all(apply(res_clus_p[, clusters[[j]]], 1,
+                function(x){length(unique(x)) == 1})))
+        }
+    }
+
+    # Calculate clus_sel_props_p
+    clus_sel_props_p <- colMeans(res_clus_p)
+
+    # Check output
+
+    stopifnot(is.numeric(feat_sel_props))
+    stopifnot(length(feat_sel_props) == p)
+    stopifnot(all(feat_sel_props >= 0))
+    stopifnot(all(feat_sel_props <= 1))
+
+    stopifnot(is.numeric(clus_sel_props_p))
+    stopifnot(length(clus_sel_props_p) == p)
+    stopifnot(all(clus_sel_props_p >= 0))
+    stopifnot(all(clus_sel_props_p <= 1))
+
+    stopifnot(is.matrix(res_n_clusters))
+    stopifnot(identical(colnames(res_n_clusters), names(clusters)))
+    stopifnot(all(res_n_clusters %in% c(0, 1)))
+    stopifnot(ncol(res_n_clusters) == n_clusters)
+    if(sampling_type=="SS"){
+        stopifnot(B == nrow(res_n_clusters)/2)
+    } else{
+        stopifnot(B == nrow(res_n_clusters))
+    }
+
+    return(list(feat_sel_props=feat_sel_props,
+        clus_sel_props_p=clus_sel_props_p, res_clus_p=res_clus_p,
+        res_n_clusters=res_n_clusters))
+}
+
+make_covariance_matrix <- function(p, nblocks, block_size, rho, var) {
+     # start with p x p identity matrix
+    Sigma <- var*diag(p)
+
+    ### select n.blocks blocks of features to be highly correlated 
+
+    # create matrix with nblocks rows, each containing a vector of 
+    # indices of highly correlated features
+    block_feats <- matrix(seq(nblocks*block_size), nrow=nblocks, byrow=TRUE)
+
+    # add covariances of highly correlated features to sigma
+    for(i in 1:nblocks){
+        for(j in 1:(block_size - 1)){
+            for(k in (j+1):block_size){
+                feat_1 <- block_feats[i, j]
+                feat_2 <- block_feats[i, k]
+                Sigma[feat_1, feat_2] <- rho
+                Sigma[feat_2, feat_1] <- rho
+            }
+        }
+    }
+    stopifnot(nrow(Sigma) == p & ncol(Sigma) == p)
+
+    stopifnot(all(Sigma == t(Sigma)))
+
+    return(Sigma)
+}
+
+make_coefficients4_ranking2 <- function(p, k_unblocked=0, beta_low,
+    beta_high, nblocks, sig_blocks, block_size){
+    # Make sure p is large enough
+    stopifnot(p >= nblocks*block_size + k_unblocked)
+    # sets blocked coefficients to beta_high and
+    # unblocked coefficients to range from beta_low down by a power law
+    beta <- numeric(p)
+    # identify indices of first coefficient in each significant block (these
+    # betas will be nonzero)
+    blocked_dgp_vars <- ((0:(sig_blocks-1))*block_size+1)
+    # make these coefficients in each block nonzero
+    beta[blocked_dgp_vars] <- beta_high
+    # identify remaining coefficients in blocks (which ought to be set to 0)
+    insig_blocked_vars <- setdiff(1:(block_size*nblocks-1), blocked_dgp_vars)
+    stopifnot(all(beta[insig_blocked_vars] == 0))
+    # find significant unblocked variables (if applicable) and fill in 
+    # coefficients
+    if(k_unblocked > 0){
+        # Range of weak signal coefficients
+        beta_lows <- beta_low/sqrt(1:k_unblocked)
+        sig_unblocked_vars <- (nblocks*block_size + 1):
+        (nblocks*block_size + k_unblocked)
+        beta[sig_unblocked_vars] <- beta_lows
+    } else {
+        sig_unblocked_vars <- NA
+    }
+    return(list(beta=beta, blocked_dgp_vars=blocked_dgp_vars,
+        sig_unblocked_vars=sig_unblocked_vars,
+        insig_blocked_vars=insig_blocked_vars))
+}
+
+gen_mu_x_y_sd <- function(n, p, beta, Sigma, sig_blocks=1, block_size, snr=NA,
+    sigma_eps_sq=NA){
+    # print(Sigma)
+
+    stopifnot(nrow(Sigma) == p + sig_blocks & ncol(Sigma) == p + sig_blocks)
+
+    x <- mvrnorm(n=n, mu=rep(0, p + sig_blocks), Sigma=Sigma)
+
+    stopifnot(length(beta) == ncol(x))
+    
+    # blocked_dgp_vars <- coefs[2]
+    # sig_unblocked_vars <- coefs[3]
+    mu <- as.numeric(x %*% beta)
+    stopifnot(length(mu) == n)
+    # Remove true blocked signal feature from each block from x now that I've
+    # generated mu
+
+    # identify indices of first coefficient in each significant block, which
+    # correspond to the latent features (these betas will be nonzero)
+    blocked_dgp_vars <- ((0:(sig_blocks-1))*block_size+1)
+
+    stopifnot(length(blocked_dgp_vars) == sig_blocks)
+
+    z <- x[, blocked_dgp_vars]
+    x <- x[, setdiff(1:ncol(x), blocked_dgp_vars)]
+    
+    # If SNR is null, use sigma_eps_sq
+    if(!is.na(sigma_eps_sq)){
+        sd <- sqrt(sigma_eps_sq)
+    }else{
+        sd <- sqrt(sum(mu^2) / (n * snr)) # taking snr = ||mu||^2 /(n * sigma^2)
+    }
+    return(list(X=x, mu=mu, blocked_dgp_vars=blocked_dgp_vars, z=z, sd=sd))
+}
+
+checkXInputResults <- function(newx, css_X){
+
+    feat_names <- as.character(NA)
+    if(!is.null(colnames(newx))){
+        feat_names <- colnames(newx)
+    }
+
+    # Check if x is a matrix; if it's a data.frame, convert to matrix.
+    if(is.data.frame(newx)){
+        newx <- model.matrix(~ ., newx)
+    }
+
+    stopifnot(is.matrix(newx))
+    stopifnot(all(!is.na(newx)))
+
+    n <- nrow(newx)
+    p <- ncol(newx)
+    stopifnot(p >= 2)
+    if(length(feat_names) > 1){
+        stopifnot(length(feat_names) == p)
+    } else{
+        stopifnot(is.na(feat_names))
+    }
+    
+    colnames(newx) <- character()
+
+    # Confirm that newx matches css_results$X
+    if(p != ncol(css_X)){
+        stop("Number of columns in newx must match number of columns from matrix provided to css")
+    }
+    if(length(feat_names) != 1){
+        if(!identical(feat_names, colnames(css_X))){
+            stop("Provided feature names for newx do not match feature names provided to css")
+        }
+    }
+
+    return(list(feat_names=feat_names, newx=newx))
+}
+
+#' @param cutoff Numeric; css will return only those clusters with selection
+#' proportions equal to at least cutoff. Must be between 0 and 1. Default is 0
+#' (in which case all clusters are returned in decreasing order of selection
+#' proportion).
+#' @param average Logical; if average=TRUE then for selected clusters an
+#' average of the features will be taken to form a cluster representative (with
+#' weights for the average provided in the output of css), and if average=FALSE
+#' then only the most frequently selected cluster member will be returned. (The
+#' latter is "sparse cluster stability selection" and the former is
+#' either "simple averaged cluster stability selection" or "weighted averaged
+#' cluster stability selection," depending on the value of the input weighted.)
+#' If no clusters are provided, average is coerced to FALSE regardless of how it
+#' is specified in the function call. See Faletto and Bien (2022) for details.
+#' Default is FALSE.
+#' @param weighted Logical; only used if average=TRUE. In this case, if 
+#' weighted=TRUE then the weights for each feature in a selected cluster will
+#' be calculated in proportion to each feature's individual selection proportion
+#' across all of the subsamples, and if weighted=FALSE the weights will all be
+#' equal (that is, the cluster representative will be formed by a simple average
+#' of the features in the cluster). weighted=TRUE makes sense if some of the
+#' features in each cluster may be more correlated with the latent signal than
+#' others, and if there is enough data (and low enough noise) that these weights
+#' can be estimated reasonably well. weighted=FALSE is a good choice otherwise.
+#' See Faletto and Bien (2022) for details. Default is TRUE.
+formCssDesign <- function(css_results, weighting, cutoff, min_num_clusts,
+    max_num_clusts, newx=NA){
+    # Takes in results from css function and outputs a design matrix
+
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    if(length(newx) == 1){
+        if(is.na(newx)){
+            if(length(css_results$train_inds) == 0){
+                stop("If css was not provided with indices to set aside for model training, then newx must be provided to formCssDesign")
+            }
+            newx <- css_results$X[css_results$train_inds, ]
+            feat_names <- colnames(newx)
+        } else{
+            results <- checkXInputResults(newx, css_results$X)
+
+            newx <- results$newx
+            feat_names <- results$feat_names
+            
+            rm(results)
+        }
+    } else{
+        results <- checkXInputResults(newx, css_results$X)
+
+        newx <- results$newx
+        feat_names <- results$feat_names
+        
+        rm(results)
+    }
+
+    n <- nrow(newx)
+    p <- ncol(newx)
+
+    stopifnot(is.numeric(cutoff) | is.integer(cutoff))
+    stopifnot(length(cutoff) == 1)
+    stopifnot(cutoff >= 0)
+    stopifnot(cutoff <= 1)
+
+    stopifnot(length(weighting)==1)
+    if(!is.character(weighting)){
+        stop("Weighting must be a character")
+    }
+    if(!(weighting %in% c("sparse", "simple_avg", "weighted_avg"))){
+        stop("Weighting must be a character and one of sparse, simple_avg, or weighted_avg")
+    }
+
+    clust_sel_results <- getSelectedClusters(css_results, weighting, cutoff,
+        min_num_clusts, max_num_clusts)
+
+    selected_clusts <- clust_sel_results$selected_clusts
+    weights <- clust_sel_results$weights
+
+    rm(clust_sel_results)
+
+    n_sel_clusts <- length(selected_clusts)
+
+    # Form matrix of cluster representatives of selected clusters
+    X_clus_reps <- matrix(rep(as.numeric(NA), n*n_sel_clusts), nrow=n,
+        ncol=n_sel_clusts)
+    colnames(X_clus_reps) <- rep(as.character(NA), n_sel_clusts)
+
+    for(i in 1:n_sel_clusts){
+        clust_i_name <- names(selected_clusts)[i]
+        stopifnot(length(clust_i_name) == 1)
+        stopifnot(clust_i_name %in% names(weights))
+
+        colnames(X_clus_reps)[i] <- clust_i_name
+
+        clust_i <- css_results$clusters[[clust_i_name]]
+        stopifnot(length(clust_i) >= 1)
+        stopifnot(all(clust_i) %in% 1:p)
+
+        weights_i <- weights[[clust_i_name]]
+        stopifnot(length(clust_i) == length(weights_i))
+
+        if(length(weights_i) > 1){
+            X_clus_reps[, i] <- newx[, clust_i] %*% weights_i
+        } else{
+            X_clus_reps[, i] <- newx[, clust_i]*weights_i
+        }
+    }
+
+    # Check output
+    stopifnot(all(!is.na(X_clus_reps)))
+    stopifnot(ncol(X_clus_reps) == n_sel_clusts)
+    stopifnot(nrow(X_clus_reps) == n)
+
+    return(X_clus_reps)
+}
+
+getSelectedClusters <- function(css_results, weighting="sparse", cutoff=0,
+    min_num_clusts=0, max_num_clusts=NA){
+    # Eliminate clusters with selection proportions below cutoff
+    clus_sel_props <- colMeans(css_results$clus_sel_mat)
+
+    selected_clusts <- clus_sel_props[clus_sel_props >= cutoff]
+    # Check that selected_clusts has length at least min_num_clusts
+    min_num_clusts <- max(min_num_clusts, 0)
+    B <- nrow(css_results$feat_sel_mat)
+    while(length(selected_clusts) < min_num_clusts){
+        cutoff <- cutoff - 1/B
+        selected_clusts <- clus_sel_props[clus_sel_props >= cutoff]
+    }
+    # Check that selected_clusts has length at most max_num_clusts
+    if(!is.na(max_num_clusts)){
+        n_clusters <- ncol(css_results$clus_sel_mat)
+        max_num_clusts <- min(max_num_clusts, n_clusters)
+        stopifnot(max_num_clusts >= min_num_clusts)
+        while(length(selected_clusts) > max_num_clusts){
+            cutoff <- cutoff + 1/B
+            selected_clusts <- clus_sel_props[clus_sel_props >= cutoff]
+        }
+    }
+    
+    clust_names <- names(selected_clusts)
+
+    n_sel_clusts <- length(selected_clusts)
+
+    if(n_sel_clusts == 0){
+        err <- paste("No clusters selected with this cutoff (try a cutoff below the maximum cluster selection proportion, ",
+            max(clus_sel_props), ")", sep="")
+        stop(err)
+    }
+
+    # Get selected features from selected clusters
+    clusters <- css_results$clusters
+    stopifnot(all(clust_names %in% names(clusters)))
+
+    # Get weights
+    weights <- clustWeights(css_results, selected_clusts, weighting)
+
+    # Get selected features from each cluster (those features with nonzero
+    # weights)
+    selected_feats <- integer()
+    for(i in 1:n_sel_clusts){
+        clus_i_name <- clust_names[i]
+        clust_i <- clusters[[clus_i_name]]
+        weights_i <- weights[[i]]
+        selected_feats <- c(selected_feats, clust_i[weights_i != 0])
+    }
+
+    feat_names <- colnames(css_results$feat_sel_mat)
+
+    names(selected_feats) <- feat_names[selected_feats]
+
+    return(list(selected_clusts=selected_clusts,
+        selected_feats=selected_feats, weights=weights))
+}
+
+getSelectionPrototypes <- function(css_results, selected_clusts){
+    # Takes in list of selected clusters and returns an integer vector (of
+    # length equal to the number of clusters) of the indices of the feature
+    # prototypes (the features from each cluster that were selected the most
+    # often individual by the base method in cluster stability selection).
+    # In the case of a tie, the tie is broken by choosing the feature most
+    # correlated with the response in the full data set provided to css.
+
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    stopifnot(all(lengths(selected_clusts) >= 1))
+    stopifnot(is.list(selected_clusts))
+
+    n_selected_clusts <- length(selected_clusts)
+
+    prototypes <- rep(as.integer(NA), n_selected_clusts)
+    for(i in 1:n_selected_clusts){
+        clust_i <- selected_clusts[[i]]
+        sel_props_i <- colMeans(css_results$feat_sel_mat)[clust_i]
+        proto_i <- clust_i[sel_props_i == max(sel_props_i)]
+        stopifnot(length(proto_i) >= 1)
+        if(length(proto_i) > 1){
+            # Break tie by looking at marginal correlations
+            corrs_i <- cor(css_results$X[, proto_i], css_results$y)[, 1]
+            proto_i <- proto_i[corrs_i == max(corrs_i)]
+        }
+        # If there is still a tie, break by choosing the first feature of those
+        # remaining
+        prototypes[i] <- proto_i[1]
+        names(prototypes)[i] <- colnames(css_results$X)[proto_i]
+    }
+
+    # Check output
+
+    stopifnot(is.integer(prototypes))
+    stopifnot(all(!is.na(prototypes)))
+    stopifnot(length(prototypes) == length(unique(prototypes)))
+
+    return(prototypes)
+}
+
+getModelSize <- function(X, y, clusters){
+    n <- nrow(X)
+
+    X_size <- X
+    if(length(clusters) > 0){
+        # Create modified design matrix by dropping all but one feature from
+        # each cluster
+        feats_to_drop <- integer()
+        for(i in 1:length(clusters)){
+            cluster_i <- clusters[[i]]
+            feat_to_keep <- identifyPrototype(cluster_i, X, y)
+            feats_to_drop <- c(feats_to_drop, setdiff(cluster_i, feat_to_keep))
+        }
+        X_size <- X_size[, -1*feats_to_drop]
+    }
+    size_results <- cv.glmnet(x=X_size, y=y, family="gaussian")
+    coefs <- as.numeric(coef(size_results, s="lambda.1se"))
+    
+    return(length(coefs[coefs != 0]))
+}
+
+clustWeights <- function(css_results, sel_clusters, weighting){
+    # Calculates weights for each cluster member. In particular, for each
+    # selected feature, this function 
+    # provides a vector of weights to apply 
+    # to the features.
+    # Inputs
+
+    # clusters
+    # A list of vectors of integers representing clusters of similar 
+    # features (derived from R). Only contains clusters of size 
+    # greater than 1.
+
+    # weighting
+    # character specifying weighting scheme
+
+
+
+    # Output:
+    
+    # weights: A list of the same length as sel_clusters of numeric vectors.
+    # weights[[j]] is the weights to use (in the same order as the jth entry of
+    # avg_feats).
+
+    # Check inputs
+
+    # Check inputs
+    stopifnot(class(css_results) == "cssr")
+
+    stopifnot(is.numeric(sel_clusters))
+    p_ret <- length(sel_clusters)
+    stopifnot(length(unique(names(sel_clusters))) == p_ret)
+    stopifnot(p_ret > 0)
+
+    stopifnot(length(weighting)==1)
+    stopifnot(is.character(weighting))
+    stopifnot(weighting %in% c("sparse", "simple_avg", "weighted_avg"))
+
+    # Get selection proportions and clusters
+    feat_sel_props <- colMeans(css_results$feat_sel_mat)
+
+    p <- length(feat_sel_props)
+    stopifnot(p >= p_ret)
+
+    clusters <- css_results$clusters
+    stopifnot(all(names(sel_clusters) %in% names(clusters)))
+
+    # Identify weights
+    weights <- list()
+    for(j in 1:p_ret){
+        # Find the cluster feature j is a member of
+        cluster_j <- clusters[[names(sel_clusters)[j]]]
+
+        weights <- getWeights2(cluster_j, j, weights, weighting, feat_sel_props)
+    }
+
+    # Add names to weights
+    names(weights) <- names(sel_clusters)
+
+    # Check output
+
+    stopifnot(length(weights) == p_ret)
+    stopifnot(is.list(weights))
+
+    for(i in 1:p_ret){
+        stopifnot(length(clusters[[names(sel_clusters)[i]]]) == length(weights[[i]]))
+        stopifnot(all(weights[[i]] >= 0))
+        stopifnot(all(weights[[i]] <= 1))
+        stopifnot(abs(sum(weights[[i]]) - 1) < 10^(-6))
+    }
+
+    return(weights)
+}
+
+getWeights2 <- function(cluster_i, j, weights, weighting, feat_sel_props){
+
+    # Get the selection proportions of each cluster member
+    sel_props <- feat_sel_props[cluster_i]
+    stopifnot(all(sel_props >= 0))
+    stopifnot(all(sel_props <= 1))
+
+    n_weights <- length(cluster_i)
+    
+    # Weighted or simple average?
+    if(weighting == "sparse"){
+        # Sparse cluster stability selection: All features in cluster with
+        # selection proportion equal to the max
+        # for the cluster get equal weight; rest of cluster gets 0 weight
+        if(sum(sel_props) == 0){
+            weights_i <- rep(1/n_weights, n_weights)
+        } else{
+            maxes <- sel_props==max(sel_props)
+            stopifnot(sum(maxes) > 0)
+            stopifnot(sum(maxes) <= n_weights)
+            weights_i <- rep(0, n_weights)
+            weights_i[maxes] <- 1/sum(maxes)
+        }
+    } else if(weighting == "weighted_avg"){
+        # Get weights for weighted average
+        if(sum(sel_props) == 0){
+            weights_i <- rep(1/n_weights, n_weights)
+        } else{
+            weights_i <- sel_props/sum(sel_props)
+        }
+    } else if(weighting == "simple_avg"){
+        weights_i <- rep(1/n_weights, n_weights)
+    } else{
+        stop("weighting must be one of sparse, simple_avg, or weighted_avg")
+    }
+
+    stopifnot(abs(sum(weights_i) - 1) < 10^(-6))
+    stopifnot(length(weights_i) == length(cluster_i))
+    stopifnot(length(weights_i) >= 1)
+
+    weights[[j]] <- weights_i
+
+    return(weights)
+}
+
+cor_function <- function(t, y){
+    # Absolute value of correlation of t and y. If t only has one unique value,
+    # returns 0 by definition.
+    stopifnot(is.numeric(t) | is.integer(t))
+    stopifnot(is.numeric(y) | is.integer(y))
+    stopifnot(length(t) == length(y))
+    stopifnot(length(unique(y)) > 1)
+    if(length(unique(t)) == 1){
+        return(0)
+    }
+    return(abs(cor(t, y)))
+}
+

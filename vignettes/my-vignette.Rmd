@@ -1,0 +1,141 @@
+---
+title: "Cluster Stability Selection With the cssr Package"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Cluster Stability Selection With the cssr Package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+# Initialization
+library(cssr)
+
+# Load dependencies
+library(MASS)
+library(glmnet)
+library(parallel)
+library(doParallel)
+
+# Initialize parallel processing--only works on Mac or Unix
+registerDoParallel(cores = detectCores() - 1)
+
+# Set seed for reproducibility
+set.seed(23592)
+
+```
+
+# Getting Started
+Cluster stability selection is a feature selection method. Given data $(X, y)$, cluster stability selection selects the variables in $X$ that are useful for predicting $y$.
+
+```{r}
+# Generate some data
+data <- genLatentData(n = 200, # Sample size
+                      p = 100, # Number of features 
+                      cluster_size = 10, # Number of features in a cluster 
+                      # correlated with a latent variable
+                      k_unclustered = 10, # Number of unclustered features 
+                      # that influence y
+                      snr = 3 # Signal-to-noise ratio in the response y 
+                      # generated from the data.
+                      )
+
+X <- data$X
+y <- data$y
+
+output <- cssSelect(X, y)
+
+output$selected_feats
+```
+
+Cluster stability selection is designed to be particularly useful for data that include clustered features--groups of highly correlated features. The data we generated earlier contain a cluster of 10 features (specifically, the first 10 columns of $X$) that are highly correlated with each other and an unobserved variable $Z$ that is associated with $y$. We can tell cluster stability selection about this cluster using the "clusters" argument.
+
+```{r}
+clus_output <- cssSelect(X, y, clusters=list("Z_cluster"=1:10))
+
+clus_output$selected_feats
+```
+
+Cluster stability selection returns both a set of selected clusters (below) and all of the features contained within those clusters (as in the above).
+
+```{r}
+clus_output$selected_clusts
+```
+
+need to finish vignette...
+
+```{r}
+clusters <- list("Z_clust"=1:10, 50:55)
+
+# Wrapper functions (easy!)
+n_test <- 50
+n <- 200
+p <- 100
+testx <- matrix(rnorm(n_test*p), nrow=n_test, ncol=p)
+
+cssPredict(X, y, testx, clusters)
+
+# Get a good lambda
+inds <- 1:round(n/2)
+lambda <- getLassoLambda(X[setdiff(1:n, inds), ], y[setdiff(1:n, inds)])
+
+# clusters <- list(1:10, 50:55)
+# clusters <- 1:10
+
+results <- css(X=X, y=y, lambda=lambda
+               , clusters=clusters
+               # , clusters=list()
+               # , clusters=1:10
+               # , sampling.type = "SS"
+               # B = 100,
+               # , prop_feats_remove = .5
+               , train_inds = inds
+)
+
+str(results)
+
+w <- "sparse"
+c <- 0.3
+
+predictions <- results |> getCssPreds(testX = testx, weighting=w,
+                                      cutoff=c
+                                      , min_num_clusts=1
+                                      , max_num_clusts=3
+)
+predictions
+
+train_x <- matrix(rnorm(n_test*p), nrow=n_test, ncol=p)
+train_y <- rnorm(n_test)
+
+preds2 <- results |> getCssPreds(testX = testx, weighting=w,
+                                 cutoff=c, min_num_clusts=1, max_num_clusts=3,
+                                 trainX=train_x
+                                 , trainY=train_y
+)
+
+preds2
+
+selections <- results |> getCssSelections(weighting=w, cutoff=c
+                                          # , min_num_clusts=1
+                                          # , max_num_clusts=3
+)
+
+str(selections)
+
+selections$selected_clusts
+selections$selected_feats
+
+# results |> print.cssr(cutoff=c, min_num_clusts=1, max_num_clusts=3)
+
+x_design <- results |> getCssDesign(testx, weighting=w, cutoff=c, min_num_clusts=1, max_num_clusts=3)
+
+str(x_design)
+```
+
