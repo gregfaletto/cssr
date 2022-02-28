@@ -1266,7 +1266,7 @@ createSubsamples <- function(n, p, B, sampling_type, prop_feats_remove=0){
                 # Keep the same features as in the other subsample (this
                 # ensures that the theoretical guarantee of Shah and Samworth
                 # 2013 remains valid on every individual pair of subsamples)
-                subsamps_and_feats[[B + i]] <- list(subsample=subsamples[[i]],
+                subsamps_and_feats[[B + i]] <- list(subsample=subsamples[[B + i]],
                     feats_to_keep=subsamps_and_feats[[i]]$feats_to_keep)
             }
         }
@@ -1312,8 +1312,8 @@ getSubsamps <- function(n, B, sampling_type){
             stopifnot(length(subsamples[[B + i]]) ==
                 length(unique(subsamples[[B + i]])))
         }
+        stopifnot(length(subsamples) == 2*B)
     }
-    stopifnot(length(subsamples) == 2*B)
     return(subsamples)
 }
 
