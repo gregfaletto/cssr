@@ -69,10 +69,10 @@
 #' selection.
 #' @return A list containing the following items: \item{feat_sel_mat}{A B (or
 #' 2B for sampling.method "SS") x p numeric (binary) matrix.
-#' feat_sel_mat[i, j] = 1 if feature j was selected by the base feature
+#' `feat_sel_mat[i, j] = 1` if feature j was selected by the base feature
 #' selection method on subsample i, and 0 otherwise.} \item{clus_sel_mat}{A B
 #' (or 2*B for SS sampling) x length(selected) numeric (binary) matrix.
-#' clus_sel_mat[i, j] = 1 if at least one feature from cluster j was selected by
+#' `clus_sel_mat[i, j] = 1` if at least one feature from cluster j was selected by
 #' the base feature selection method on subsample i, and 0 otherwise.}
 #' \item{X}{The X matrix provided to css.} \item{y}{The y vector provided to
 #' css.} \item{clusters}{A named list of integer vectors containing all of the
@@ -644,7 +644,7 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
     # Use fitted model to generate predictions on testX
     df_test <- data.frame(testX_clusters)
     colnames(df_test) <- clust_X_names
-    predictions <- predict(model, newdata=df_test)
+    predictions <- stats::predict(model, newdata=df_test)
     names(predictions) <- NULL
 
     # Check output
@@ -754,7 +754,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' Print cluster stabilty selection output
 #'
 #' Print a summary of the information from the css function.
-#' @param css_results An object of class "cssr" (the output of the function
+#' @param x An object of class "cssr" (the output of the function
 #' css).
 #' @param cutoff Numeric; print.cssr will display only those
 #' clusters with selection proportions equal to at least cutoff. Must be between
@@ -769,6 +769,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' max_num_clusts clusters, the cutoff will be decreased until at most
 #' max_num_clusts clusters are selected.) Default is NA (in which case
 #' max_num_clusts is ignored).
+#' @param ... Additional arguments (not used)
 #' @return A data.frame; each row contains a cluster, arranged in decreasing
 #' order of cluster selection proportion from top to bottom. The columns are
 #' ClustName (the name of the cluster that was either provided to css or made by
@@ -781,9 +782,9 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' the cluster).
 #' @author Gregory Faletto, Jacob Bien
 #' @export
-print.cssr <- function(css_results, cutoff=0, min_num_clusts=0,
-    max_num_clusts=NA){
+ print.cssr <- function(x, cutoff=0, min_num_clusts=0, max_num_clusts=NA, ...){
     # Check inputs
+    css_results <- x
     stopifnot(class(css_results) == "cssr")
 
     stopifnot(is.numeric(cutoff) | is.integer(cutoff))
@@ -1004,8 +1005,8 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 #' @param X An n x p numeric matrix (preferably) or a data.frame (which will
 #' be coerced internally to a matrix by the function model.matrix) containing
 #' the p >= 2 features/predictors.
-#' @param y A length-n numeric vector containing the responses; y[i] is the
-#' response corresponding to observation X[i, ].
+#' @param y A length-n numeric vector containing the responses; `y[i]` is the
+#' response corresponding to observation `X[i, ]`.
 #' @param clusters Optional; either an integer vector of a list of integer
 #' vectors; each
 #' vector should contain the indices of a cluster of features (a subset of 1:p).
@@ -1087,8 +1088,8 @@ cssSelect <- function(X, y, clusters = list()
 #' split into two parts; half of the data will be used for feature selection by
 #' cluster stability selection, and half will be used for estimating a linear
 #' model on the selected cluster representatives.
-#' @param y_train A length-n numeric vector containing the responses; y[i] is the
-#' response corresponding to observation X[i, ].
+#' @param y_train A length-n numeric vector containing the responses; `y[i]` is the
+#' response corresponding to observation `X[i, ]`.
 #' @param X_predict A numeric matrix (preferably) or a data.frame (which will
 #' be coerced internally to a matrix by the function model.matrix) containing
 #' the data that will be used to generate predictions. Must contain the same
@@ -1397,7 +1398,7 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
     # Get list of selected feature sets from subsamples
 
     res_list <- parallel::mclapply(X=subsamps_object, FUN=cssLoop, x=x, y=y,
-        lambda=lambda, fitfun=fitfun, mc.cores=detectCores())
+        lambda=lambda, fitfun=fitfun, mc.cores=parallel::detectCores())
 
     # Store selected sets in B x p (or 2*B x p for "SS") binary matrix
     if(sampling_type=="SS"){
@@ -1592,7 +1593,7 @@ cssLasso <- function(X, y, lambda){
 
     # Get coefficients at desired lambda
 
-    pred <- predict(lasso_model, type="nonzero", s=lambda, exact=TRUE, x=X, y=y)
+    pred <- glmnet::predict.glmnet(lasso_model, type="nonzero", s=lambda, exact=TRUE, x=X, y=y)
 
     if(is.null(pred[[1]])){return(integer())}
 
@@ -2449,7 +2450,7 @@ getModelSize <- function(X, y, clusters){
         X_size <- X_size[, -1*feats_to_drop]
     }
     size_results <- glmnet::cv.glmnet(x=X_size, y=y, family="gaussian")
-    coefs <- as.numeric(coef(size_results, s="lambda.1se"))
+    coefs <- as.numeric(glmnet::coef.glmnet(size_results, s="lambda.1se"))
 
     return(length(coefs[coefs != 0]))
 }

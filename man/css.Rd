@@ -93,10 +93,10 @@ selection.}
 \value{
 A list containing the following items: \item{feat_sel_mat}{A B (or
 2B for sampling.method "SS") x p numeric (binary) matrix.
-feat_sel_mat\link{i, j} = 1 if feature j was selected by the base feature
+\code{feat_sel_mat[i, j] = 1} if feature j was selected by the base feature
 selection method on subsample i, and 0 otherwise.} \item{clus_sel_mat}{A B
 (or 2*B for SS sampling) x length(selected) numeric (binary) matrix.
-clus_sel_mat\link{i, j} = 1 if at least one feature from cluster j was selected by
+\code{clus_sel_mat[i, j] = 1} if at least one feature from cluster j was selected by
 the base feature selection method on subsample i, and 0 otherwise.}
 \item{X}{The X matrix provided to css.} \item{y}{The y vector provided to
 css.} \item{clusters}{A named list of integer vectors containing all of the
