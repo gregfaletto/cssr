@@ -19,8 +19,8 @@ cssSelect(
 be coerced internally to a matrix by the function model.matrix) containing
 the p >= 2 features/predictors.}
 
-\item{y}{A length-n numeric vector containing the responses; y\link{i} is the
-response corresponding to observation X\link{i, }.}
+\item{y}{A length-n numeric vector containing the responses; \code{y[i]} is the
+response corresponding to observation \code{X[i, ]}.}
 
 \item{clusters}{Optional; either an integer vector of a list of integer
 vectors; each

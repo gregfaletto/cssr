@@ -4,10 +4,10 @@
 \alias{print.cssr}
 \title{Print cluster stabilty selection output}
 \usage{
-\method{print}{cssr}(css_results, cutoff = 0, min_num_clusts = 0, max_num_clusts = NA)
+\method{print}{cssr}(x, cutoff = 0, min_num_clusts = 0, max_num_clusts = NA, ...)
 }
 \arguments{
-\item{css_results}{An object of class "cssr" (the output of the function
+\item{x}{An object of class "cssr" (the output of the function
 css).}
 
 \item{cutoff}{Numeric; print.cssr will display only those
@@ -25,6 +25,8 @@ use regardless of cutoff. (That is, if the chosen cutoff returns more than
 max_num_clusts clusters, the cutoff will be decreased until at most
 max_num_clusts clusters are selected.) Default is NA (in which case
 max_num_clusts is ignored).}
+
+\item{...}{Additional arguments (not used)}
 }
 \value{
 A data.frame; each row contains a cluster, arranged in decreasing

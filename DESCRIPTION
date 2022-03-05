@@ -2,8 +2,8 @@ Package: cssr
 Title: Feature Selection Using Cluster Stability Selection
 Version: 0.0.0.9000
 Authors@R: 
-    c(person("Gregory", "Faletto", , "gregory.faletto@marshall.usc.edu", role = c("aut", 	"cre"), comment = c(ORCID = "0000-0001-8298-1401")),
-	person("Jacob", "Bien", "jbien@usc.edu", role = "aut"))
+    c(person("Gregory", "Faletto", email = "gregory.faletto@marshall.usc.edu", role = c("aut", "cre"), comment = c(ORCID = "0000-0001-8298-1401")),
+	person("Jacob", "Bien", email = "jbien@usc.edu", role = "aut"))
 Description: Parallelized implementation of cluster stability selection (Faletto
     and Bien 2022). Functions to select clusters and features, create weighted 
     averages of the members of selected clusters ("cluster representatives"),
