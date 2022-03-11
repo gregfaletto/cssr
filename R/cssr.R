@@ -644,7 +644,7 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
     # Use fitted model to generate predictions on testX
     df_test <- data.frame(testX_clusters)
     colnames(df_test) <- clust_X_names
-    predictions <- stats::predict(model, newdata=df_test)
+    predictions <- stats::predict.lm(model, newdata=df_test)
     names(predictions) <- NULL
 
     # Check output
@@ -782,7 +782,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' the cluster).
 #' @author Gregory Faletto, Jacob Bien
 #' @export
- print.cssr <- function(x, cutoff=0, min_num_clusts=0, max_num_clusts=NA, ...){
+print.cssr <- function(x, cutoff=0, min_num_clusts=0, max_num_clusts=NA, ...){
     # Check inputs
     css_results <- x
     stopifnot(class(css_results) == "cssr")
@@ -999,7 +999,7 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 #' function for css and getCssSelections. Using cssSelect is simpler, but it
 #' has fewer options, and it executes the full (computationally expensive)
 #' subsampling procedured every time it is called. In contrast, css can be
-#' called just once, and then cssSelect can quickly return results using
+#' called just once, and then getCssSelections can quickly return results using
 #' different values of cutoff, max_num_clusts, etc. from the calculations done
 #' in one call to css.
 #' @param X An n x p numeric matrix (preferably) or a data.frame (which will
@@ -1088,8 +1088,8 @@ cssSelect <- function(X, y, clusters = list()
 #' split into two parts; half of the data will be used for feature selection by
 #' cluster stability selection, and half will be used for estimating a linear
 #' model on the selected cluster representatives.
-#' @param y_train A length-n numeric vector containing the responses; `y[i]` is the
-#' response corresponding to observation `X[i, ]`.
+#' @param y_train A length-n numeric vector containing the responses; `y[i]` is
+#' the response corresponding to observation `X[i, ]`.
 #' @param X_predict A numeric matrix (preferably) or a data.frame (which will
 #' be coerced internally to a matrix by the function model.matrix) containing
 #' the data that will be used to generate predictions. Must contain the same
@@ -1165,7 +1165,7 @@ cssPredict <- function(X_train, y_train, X_predict, clusters = list()
 
     # Get predictions
     getCssPreds(css_results, testX = X_predict, weighting="weighted_avg",
-    	cutoff=cutoff, max_num_clusts=max_num_clusts)
+        cutoff=cutoff, max_num_clusts=max_num_clusts)
 }
 
 #
@@ -1593,7 +1593,8 @@ cssLasso <- function(X, y, lambda){
 
     # Get coefficients at desired lambda
 
-    pred <- glmnet::predict.glmnet(lasso_model, type="nonzero", s=lambda, exact=TRUE, x=X, y=y)
+    pred <- glmnet::predict.glmnet(lasso_model, type="nonzero",
+        s=lambda, exact=TRUE, x=X, y=y)
 
     if(is.null(pred[[1]])){return(integer())}
 
@@ -2353,7 +2354,15 @@ getSelectedClusters <- function(css_results, weighting="sparse", cutoff=0,
         stopifnot(max_num_clusts >= min_num_clusts)
         while(length(selected_clusts) > max_num_clusts){
             cutoff <- cutoff + 1/B
-            selected_clusts <- clus_sel_props[clus_sel_props >= cutoff]
+            if(cutoff > 1){
+                break
+            }
+            # Make sure we don't reduce to a selected set of size 0
+            if(any(clus_sel_props >= cutoff)){
+                selected_clusts <- clus_sel_props[clus_sel_props >= cutoff]
+            } else{
+                break
+            }
         }
     }
 
@@ -2366,6 +2375,23 @@ getSelectedClusters <- function(css_results, weighting="sparse", cutoff=0,
             max(clus_sel_props), ")", sep="")
         stop(err)
     }
+
+    # It may be impossible to get at least min_num_clusts or at most
+    # max_num_clusts; if so, give a warning
+    if(n_sel_clusts < min_num_clusts){
+        warn <- paste("Returning fewer than min_num_clusts = ", min_num_clusts,
+            " clusters because decreasing the cutoff any further would require returning more than max_num_clusts = ",
+            max_num_clusts, " clusters", sep="")
+        warning(warn)
+    }
+    if(!is.na(max_num_clusts)){
+        if(n_sel_clusts > max_num_clusts){
+            warn <- paste("Returning more than max_num_clusts = ", max_num_clusts,
+                " clusters because increasing the cutoff any further would require returning 0 clusters", sep="")
+            warning(warn)
+        }
+    }
+    
 
     # Get selected features from selected clusters
     clusters <- css_results$clusters
