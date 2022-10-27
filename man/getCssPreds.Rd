@@ -22,9 +22,9 @@ css).}
 \item{testX}{A numeric matrix (preferably) or a data.frame (which will
 be coerced internally to a matrix by the function model.matrix) containing
 the data that will be used to generate predictions. Must contain the same
-features (in the same
-number of columns) as the matrix provided to css, and if the columns of testX
-are labeled, the names must match the variable names provided to css.}
+features (in the same number of columns) as the matrix provided to css, and
+if the columns of testX are labeled, the names must match the variable names
+provided to css.}
 
 \item{weighting}{Character; determines how to calculate the weights to
 combine features from the selected clusters into weighted averages, called
@@ -61,12 +61,12 @@ the data that will be used to estimate the linear model from the selected
 clusters. trainX is only necessary to provide if no train_inds were
 designated in the css function call to set aside observations for model
 estimation (though even if train_inds was provided, trainX and trianY will be
-used for model estimation regardless if they are both provided to
-getCssPreds). Must contain the same features (in the same number of columns)
-as the matrix provided to css, and if the columns of trainX
-are labeled, the names must match the variable names provided to css.
-Default is NA (in which case getCssPreds uses the observations from
-the train_inds that were provided to css to estimate a linear model).}
+used for model estimation if they are both provided to getCssPreds). Must
+contain the same features (in the same number of columns) as the matrix
+provided to css, and if the columns of trainX are labeled, the names must
+match the variable names provided to css. Default is NA (in which case
+getCssPreds uses the observations from the train_inds that were provided to
+css to estimate a linear model).}
 
 \item{trainY}{The response corresponding to trainX. Must be of the same type
 as the response provided to css, and must have the same length as the number
@@ -77,8 +77,7 @@ from the train_inds that were provided to css).}
 }
 \value{
 \item{predictions}{A vector of predictions corresponding to the
-observations from testX. (predictions will have length equal to
-nrow(testX).)}
+observations from testX.}
 }
 \description{
 Generate predictions on test data using cluster stability-selected model.

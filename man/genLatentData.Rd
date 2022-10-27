@@ -29,10 +29,10 @@ length n.)}
 generated X will have p columns.}
 
 \item{k_unclustered}{Integer or numeric; the number of features in X that
-will have nonzero coefficients in the true model for y among those features not
-generated from the n_clusters latent variables (called "weak signal" features
-in the simulations from Faletto and Bien 2022). The coefficients on these
-features will be determined by beta_unclustered.}
+will have nonzero coefficients in the true model for y among those features
+not generated from the n_clusters latent variables (called "weak signal"
+features in the simulations from Faletto and Bien 2022). The coefficients on
+these features will be determined by beta_unclustered.}
 
 \item{cluster_size}{Integer or numeric; for each of the n_clusters latent
 variables, X will contain cluster_size noisy proxies that are correlated with

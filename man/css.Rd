@@ -13,13 +13,14 @@ css(
   sampling_type = "SS",
   B = ifelse(sampling_type == "MB", 100L, 50L),
   prop_feats_remove = 0,
-  train_inds = integer()
+  train_inds = integer(),
+  num_cores = 1L
 )
 }
 \arguments{
 \item{X}{An n x p numeric matrix (preferably) or a data.frame (which will
 be coerced internally to a matrix by the function model.matrix) containing
-the p >= 2 features/predictors.}
+p >= 2 features/predictors.}
 
 \item{y}{The response; can be anything that takes the form of an
 n-dimensional vector, with the ith entry corresponding to the ith row of X.
@@ -33,36 +34,35 @@ lasso fit. (css does not require lambda to be any particular object because
 for a user-specified feature selection method fitfun, lambda can be an
 arbitrary object. See the description of fitfun below.)}
 
-\item{clusters}{Either an integer vector of a list of integer vectors; each
-vector should contain the indices of a cluster of features (a subset of 1:p).
-(If there is only one cluster, clusters can either be a list of length 1 or
-an integer vector.) All of the provided clusters must be non-overlapping.
-Every feature not appearing in any cluster will be assumed to be unclustered
-(that is, they  will be treated as if they are in a "cluster" containing only
-themselves). If clusters is a list of length 0 (or a list only containing
-clusters of length 1), then css() returns the same results as stability
-selection (so feat_sel_mat will be identical to clus_sel_mat). Names for
-the clusters will be needed later; any clusters that are not given names
-in the list clusters will be given names automatically by css. Default is
-list() (so no clusters are specified).}
+\item{clusters}{A list of integer vectors; each vector should contain the
+indices of a cluster of features (a subset of 1:p). (If there is only one
+cluster, clusters can either be a list of length 1 or an integer vector.)
+All of the provided clusters must be non-overlapping. Every feature not
+appearing in any cluster will be assumed to be unclustered (that is, they
+will be treated as if they are in a "cluster" containing only themselves). If
+clusters is a list of length 0 (or a list only containing clusters of length
+1), then css() returns the same results as stability selection (so the
+returned feat_sel_mat will be identical to clus_sel_mat). Names for the
+clusters will be needed later; any clusters that are not given names in the
+provided list will be given names automatically by css. Default is list() (so
+no clusters are specified).}
 
 \item{fitfun}{A function; the feature selection function used on each
 subsample by cluster stability selection. This can be any feature selection
-method; the only
-requirement is that it accepts the arguments (and only the arguments) X, y,
-and lambda and returns an integer vector that is a subset of 1:p. For
-example, fitfun could be best subset selection or forward stepwise selection
-(as implemented by the R package leaps) or LARS (from the R package lars) and
-lambda could be the desired model size; or fitfun could be the elastic
-net (as implemented by the R package glmnet) and lambda could be a length-two
-vector specifying lambda and alpha. Default is cssLasso, an implementation
-of lasso (relying on the R package glmnet), where lambda must be a positive
-numeric specifying the L1 penalty for the lasso.}
+method; the only requirement is that it accepts the arguments (and only the
+arguments) X, y, and lambda and returns an integer vector that is a subset of
+1:p. For example, fitfun could be best subset selection or forward stepwise
+selection or LARS and lambda could be the desired model size; or fitfun could be the
+elastic net and lambda could be a length-two vector specifying lambda and
+alpha. Default is cssLasso, an implementation of lasso (relying on the R
+package glmnet), where lambda must be a positive numeric specifying the L1
+penalty for the lasso.}
 
 \item{sampling_type}{A character vector; either "SS" or "MB". For "MB",
 all B subsamples are drawn randomly (as proposed by Meinshausen and Bühlmann
 2010). For "SS", in addition to these B subsamples, the B complementary pair
-subsamples will be drawn as well (see Faletto and Bien 2022 or Shah and}
+subsamples will be drawn as well (see Faletto and Bien 2022 or Shah and
+Samworth 2013 for details). Default is "SS", and "MB" is not supported yet.}
 
 \item{B}{Integer or numeric; the number of subsamples. Note: For
 saampling.type=="MB" the total number of subsamples will be B; for
@@ -87,17 +87,21 @@ investigated either theoretically or in simulations by Faletto and Bien
 \item{train_inds}{Optional; an integer or numeric vector containing the
 indices of observations in X and y to set aside for model training by the
 function getCssPreds after feature selection. If train_inds is not provided,
-all of the observations in the provided data will be used for feature
+all of the observations in the provided data set will be used for feature
 selection.}
+
+\item{num_cores}{Optional; an integer. If using parallel processing, the
+number of cores to use for parallel processing (num_cores will be supplied
+internally as the mc.cores argument of parallel::mclapply).}
 }
 \value{
 A list containing the following items: \item{feat_sel_mat}{A B (or
-2B for sampling.method "SS") x p numeric (binary) matrix.
+\code{2*B} for sampling.method "SS") x p numeric (binary) matrix.
 \code{feat_sel_mat[i, j] = 1} if feature j was selected by the base feature
 selection method on subsample i, and 0 otherwise.} \item{clus_sel_mat}{A B
-(or 2*B for SS sampling) x length(selected) numeric (binary) matrix.
-\code{clus_sel_mat[i, j] = 1} if at least one feature from cluster j was selected by
-the base feature selection method on subsample i, and 0 otherwise.}
+(or 2*B for SS sampling) x length(clusters) numeric (binary) matrix.
+\code{clus_sel_mat[i, j] = 1} if at least one feature from cluster j was selected
+by the base feature selection method on subsample i, and 0 otherwise.}
 \item{X}{The X matrix provided to css.} \item{y}{The y vector provided to
 css.} \item{clusters}{A named list of integer vectors containing all of the
 clusters provided to css, as well as size 1 clusters of any features not

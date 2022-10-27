@@ -18,11 +18,8 @@ knitr::opts_chunk$set(
 # Initialization
 library(cssr)
 
-# Load dependencies
-library(doParallel)
-
-# Initialize parallel processing--only works on Mac or Unix
-registerDoParallel(cores = detectCores() - 1)
+# # Initialize parallel processing--only works on Mac or Unix
+# registerDoParallel(cores = detectCores() - 1)
 
 # Set seed for reproducibility
 set.seed(23592)

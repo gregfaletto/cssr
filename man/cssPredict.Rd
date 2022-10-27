@@ -24,8 +24,8 @@ split into two parts; half of the data will be used for feature selection by
 cluster stability selection, and half will be used for estimating a linear
 model on the selected cluster representatives.}
 
-\item{y_train}{A length-n numeric vector containing the responses; \code{y[i]} is the
-response corresponding to observation \code{X[i, ]}.}
+\item{y_train}{A length-n numeric vector containing the responses; \code{y[i]} is
+the response corresponding to observation \code{X[i, ]}.}
 
 \item{X_predict}{A numeric matrix (preferably) or a data.frame (which will
 be coerced internally to a matrix by the function model.matrix) containing
