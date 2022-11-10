@@ -108,14 +108,9 @@
 #' Linear Models via Coordinate Descent. \emph{Journal of Statistical Software},
 #' 33(1), 1-22. URL \url{https://www.jstatsoft.org/v33/i01/}.
 #' @export
-css <- function(X, y, lambda
-    , clusters = list()
-    , fitfun = cssLasso
-    , sampling_type = "SS"
-    , B = ifelse(sampling_type == "MB", 100L, 50L)
-    , prop_feats_remove = 0
-    , train_inds = integer()
-    , num_cores = 1L
+css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
+    sampling_type = "SS", B = ifelse(sampling_type == "MB", 100L, 50L),
+    prop_feats_remove = 0, train_inds = integer(), num_cores = 1L
     ){
 
     # Check inputs
@@ -124,7 +119,6 @@ css <- function(X, y, lambda
         B, prop_feats_remove, train_inds, num_cores)
 
     feat_names <- check_list$feat_names
-    clust_names <- check_list$clust_names
     X <- check_list$X
     clusters <- check_list$clusters
 
@@ -148,33 +142,26 @@ css <- function(X, y, lambda
 
     ### Get matrix of selected feature sets from subsamples
 
-    res <- getSelMatrix(X[sel_inds, ], y[sel_inds], lambda, B, sampling_type,
-        subsamps_object, num_cores, fitfun)
-
-    ### Format clusters into a list with no clusters of size 1
-    clusters <- formatClusters(clusters, p=p, clust_names=clust_names)$clusters
-
-    ### Get selection proportions for clusters corresponding to each feature
-
-    clus_prop_results <- getClusterProps(clusters, res, sampling_type)
-
-    clus_sel_props_p <- clus_prop_results$clus_sel_props_p
-    res_n_clusters <- clus_prop_results$res_n_clusters
-
-    rm(clus_prop_results)
+    feat_sel_mat <- getSelMatrix(X[sel_inds, ], y[sel_inds], lambda, B,
+        sampling_type, subsamps_object, num_cores, fitfun)
 
     if(any(!is.na(feat_names))){
-        colnames(res) <- feat_names
+        colnames(feat_sel_mat) <- feat_names
         colnames(X) <- feat_names
     }
 
+    ### Get selection proportions for clusters corresponding to each feature
+
+    clus_sel_mat <- getClusterProps(clusters, feat_sel_mat,
+        sampling_type)$res_n_clusters
+
     # Check outputs
-    stopifnot(!is.null(colnames(res_n_clusters)))
+    stopifnot(!is.null(colnames(clus_sel_mat)))
 
-    stopifnot(all(colnames(res_n_clusters) == names(clusters)))
+    stopifnot(all(colnames(clus_sel_mat) == names(clusters)))
 
-    ret <- list(feat_sel_mat = res,
-        clus_sel_mat = res_n_clusters,
+    ret <- list(feat_sel_mat = feat_sel_mat,
+        clus_sel_mat = clus_sel_mat,
         X = X,
         y = y,
         clusters = clusters,
@@ -665,6 +652,9 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
         min_num_clusts=min_num_clusts, max_num_clusts=max_num_clusts)
 
     sel_clusts <- sel_results$selected_clusts
+
+    print("sel_clusts:")
+    print(sel_clusts)
 
     n_sel_clusts <- length(sel_clusts)
 
@@ -1220,7 +1210,7 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
     p <- ncol(x)
 
     stopifnot(length(y) == n)
-    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
     checkB(B)
@@ -1320,7 +1310,7 @@ cssLoop <- function(input, x, y, lambda, fitfun){
     p <- ncol(x)
 
     stopifnot(length(y) == n)
-    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
     if(!is.list(input)){
@@ -2755,12 +2745,9 @@ checkXInputResults <- function(newx, css_X){
 #' @return A named list with the following elements: \item{feat_names}{A 
 #' character vector containing the column names of X (if the provided X
 #' had column names). If the provided X did not have column names, feat_names
-#' will be NA.}\item{clust_names}{A  character vector containing the names of
-#' the provided clusters (if the provided clusters were named). If the provided
-#' clusters were not named, clust_names will be NA.} \item{X}{The provided X
-#' matrix, coerced from a data.frame to a matrix if the provided X was a
-#' data.frame.} \item{clusters}{Either an integer vector of a list of integer
-#' vectors; each vector will contain the indices of a cluster of features.}
+#' will be NA.}\item{clusters}{A list of integer vectors; each vector will
+#' contain the indices of a cluster of features. Any duplicated clusters
+#' provided in the input will be removed.}
 #' @author Gregory Faletto, Jacob Bien
 checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     prop_feats_remove, train_inds, num_cores){
@@ -2797,11 +2784,16 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     colnames(X) <- character()
 
     stopifnot(length(y) == n)
-    # Intentionally don't check y or lambda further to allow for flexbility--these
+    # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
     # Check clusters argument
     clusters <- checkCssClustersInput(clusters)
+
+    ### Format clusters into a list where all features are in exactly one
+    # cluster (any unclustered features are put in their own "cluster" of size
+    # 1).
+    clusters <- formatClusters(clusters, p=p, clust_names=clust_names)$clusters
 
     stopifnot(class(fitfun) == "function")
     stopifnot(length(fitfun) == 1)
@@ -2833,8 +2825,7 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     stopifnot(num_cores >= 1)
     stopifnot(num_cores <= parallel::detectCores())
 
-    return(list(feat_names=feat_names, clust_names=clust_names, X=X,
-        clusters=clusters))
+    return(list(feat_names=feat_names, X=X, clusters=clusters))
 }
 
 #' Helper function to confirm that inputs to the function getCssPreds are as
