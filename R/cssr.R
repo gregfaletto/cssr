@@ -1626,13 +1626,12 @@ identifyPrototype <- function(cluster_members_i, x, y){
     if(length(cluster_members_i) == 1){
         return(cluster_members_i)
     }
-    stopifnot(length(cluster_members_i) > 1)
 
     # Choose which cluster member to represent cluster for stability
     # metric purposes by choosing the one most highly correlated
     # with y
 
-    cors_i <- apply(x[, cluster_members_i], 2, cor_function, y=y)
+    cors_i <- apply(x[, cluster_members_i], 2, corFunction, y=y)
     max_index_i <- which.max(cors_i)[1]
 
     stopifnot(length(max_index_i) == 1)
@@ -2594,7 +2593,7 @@ getClustWeights <- function(cluster_i, weighting, feat_sel_props){
 #' weights corresponding to each of the features in cluster_i. The weights
 #' will all be nonnegative and sum to 1.
 #' @author Gregory Faletto, Jacob Bien
-cor_function <- function(t, y){
+corFunction <- function(t, y){
     # Check inputs
     stopifnot(is.numeric(t) | is.integer(t))
     stopifnot(is.numeric(y) | is.integer(y))
@@ -2603,7 +2602,7 @@ cor_function <- function(t, y){
         return(0)
     }
     if(length(unique(y)) == 1){
-        warning("The second argument to cor_function only had one unique entry")
+        warning("The second argument to corFunction only had one unique entry")
         return(0)
     }
     return(abs(stats::cor(t, y)))
