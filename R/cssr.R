@@ -152,12 +152,10 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 
     ### Get selection proportions for clusters corresponding to each feature
 
-    clus_sel_mat <- getClusterProps(clusters, feat_sel_mat,
-        sampling_type)$res_n_clusters
+    clus_sel_mat <- getClusterSelMatrix(clusters, feat_sel_mat)
 
     # Check outputs
     stopifnot(!is.null(colnames(clus_sel_mat)))
-
     stopifnot(all(colnames(clus_sel_mat) == names(clusters)))
 
     ret <- list(feat_sel_mat = feat_sel_mat,
@@ -1650,11 +1648,10 @@ identifyPrototype <- function(cluster_members_i, x, y){
     return(ret)
 }
 
-#' Find cluster proportions
+#' Get cluster selection matrix
 #'
 #' Given a matrix of feature selection indicator variables and a list of
-#' clusters of features, returns a matrix of cluster indicator variables, as
-#' well as the selection proportions for both features and clusters.
+#' clusters of features, returns a matrix of cluster indicator variables.
 #'
 #' @param clusters A named list where each entry is an integer vector of indices
 #' of features that are in a common cluster, as in the output of formatClusters.
@@ -1662,46 +1659,21 @@ identifyPrototype <- function(cluster_members_i, x, y){
 #' identified clusters must be non-overlapping, and all features must appear in
 #' exactly one cluster (any unclustered features should be in their own
 #' "cluster" of size 1).
-#' @param res A binary integer matrix of dimension `B` x `p` (if sampling_type
-#' == "MB" was provided to ) or `2*B` x `p` (if sampling_type == "SS").
-#' res[i, j] = 1 if feature j was selected on subsample i and equals 0
-#' otherwise, as in the output of getSelMatrix. (That is, each row is a selected
-#' set.)
-#' @param sampling_type A character vector (either "SS" or "MB"); the sampling
-#' type used for stability selection.
-#' @return A named list with four elements. \item{feat_sel_props}{A numeric
-#' vector of length p. The jth entry is the proportion of subsamples in which
-#' feature j was selected by fitfun.} \item{clus_sel_props_p}{A numeric vector
-#' of length p. The jth entry is the proportion of subsamples in which at least
-#' one member of the cluster containing feature j was selected.}
-#' \item{res_clus_p}{An integer matrix of the same dimensions as res.
-#' res_clus_p[i, j] = 1 if at least one member of the cluster containing feature
-#' j was selected by fitfun on subsample i, and 0 otherwise.}
-#' \item{res_n_clusters}{A binary integer matrix with the same number of rows
-#' as res and length(clusters) columns. res_n_clusters[i, j] = 1 if at least
-#' one member of cluster j was selected on subsample i, and 0 otherwise.}
+#' @param res A binary integer matrix. es[i, j] = 1 if feature j was selected
+#' on subsample i and equals 0 otherwise, as in the output of getSelMatrix.
+#' (That is, each row is a selected set.)
+#' @return A binary integer matrix with the same number of rows
+#' as res and length(clusters) columns. Entry i, j is 1 if at least
+#' one member of cluster j was selected on subsample i, and 0 otherwise.
 #' @author Gregory Faletto, Jacob Bien
-getClusterProps <- function(clusters, res, sampling_type){
-
-    # TODO(gfaletto): consider deprecating feat_sel_props and res_clus_p
-    # outputs, which don't seem to be used anywhere? (res_clus_p still needs
-    # to be calculated since it is used to calculate clus_sel_props_p, but it
-    # doesn't necessarily need to be returned. feat_sel_props doesn't seem to
-    # be needed to be calculated or returned here at all.)
+getClusterSelMatrix <- function(clusters, res){
 
     # Check input
-
-    B <- checkGetClusterPropsInput(clusters, res, sampling_type)
+    checkGetClusterSelMatrixInput(clusters, res)
 
     p <- ncol(res)
 
     n_clusters <- length(clusters)
-
-    # Calculate feat_sel_props
-    feat_sel_props <- colMeans(res)
-
-    # Matrix of cluster selection proportions (with p columns)
-    res_clus_p <- res
 
     # Matrix of cluster selection proportions (with n_clusters columns)
     res_n_clusters <- matrix(rep(0L, nrow(res)*n_clusters), nrow=nrow(res),
@@ -1719,41 +1691,15 @@ getClusterProps <- function(clusters, res, sampling_type){
         if(length(clusters[[j]]) <= 1){
             next
         }
-
-        # Set all cluster members in these rows equal to 1 in res_clus_p
-        res_clus_p[rows_j_sel, clusters[[j]]] <- 1
-
-        # Confirm that all columns in res_clus_p corresponding to
-        # clusters[[j]] have the same values
-        stopifnot(all(apply(res_clus_p[, clusters[[j]]], 1,
-            function(x){length(unique(x)) == 1})))
     }
-
-    # Check res_clus_p
-    stopifnot(is.matrix(res_clus_p))
-    stopifnot(all.equal(dim(res), dim(res_clus_p)))
-    stopifnot(all(res_clus_p %in% c(0, 1)))
-
-    # For every cluster, confirm that all columns in res_clus_p corresponding
-    # to that cluster are identical (that is, every row in the submatrix
-    # res_clus_p[, clusters[[j]]] has only one unique value)
-    for(j in 1:n_clusters){
-        if(length(clusters[[j]]) > 1){
-            stopifnot(all(apply(res_clus_p[, clusters[[j]]], 1,
-                function(x){length(unique(x)) == 1})))
-        }
-    }
-
-    # Calculate clus_sel_props_p
-    clus_sel_props_p <- colMeans(res_clus_p)
 
     # Check output
-    checkGetClusterPropsOutput(feat_sel_props, p, clus_sel_props_p,
-        res_n_clusters, clusters, sampling_type, B)
+    stopifnot(is.matrix(res_n_clusters))
+    stopifnot(identical(colnames(res_n_clusters), names(clusters)))
+    stopifnot(all(res_n_clusters %in% c(0, 1)))
+    stopifnot(ncol(res_n_clusters) == length(clusters))
 
-    return(list(feat_sel_props=feat_sel_props,
-        clus_sel_props_p=clus_sel_props_p, res_clus_p=res_clus_p,
-        res_n_clusters=res_n_clusters))
+    return(res_n_clusters)
 }
 
 #' Generate covariance matrix for simulated clustered data
@@ -3444,7 +3390,7 @@ checkFormatClustersInput <- function(clusters, p, clust_names,
     return(clusters)
 }
 
-#' Helper function to check inputs to getClusterProps function
+#' Helper function to check inputs to getClusterSelMatrix function
 #'
 #' @param clusters A named list where each entry is an integer vector of indices
 #' of features that are in a common cluster, as in the output of formatClusters.
@@ -3452,75 +3398,18 @@ checkFormatClustersInput <- function(clusters, p, clust_names,
 #' identified clusters must be non-overlapping, and all features must appear in
 #' exactly one cluster (any unclustered features should be in their own
 #' "cluster" of size 1).
-#' @param res A binary integer matrix of dimension `B` x `p` (if sampling_type
-#' == "MB" was provided to ) or `2*B` x `p` (if sampling_type == "SS").
-#' res[i, j] = 1 if feature j was selected on subsample i and equals 0
-#' otherwise, as in the output of getSelMatrix. (That is, each row is a selected
-#' set.)
-#' @param sampling_type A character vector (either "SS" or "MB"); the sampling
-#' type used for stability selection.
+#' @param res A binary integer matrix. res[i, j] = 1 if feature j was selected
+#' on subsample i and equals 0 otherwise, as in the output of getSelMatrix.
+#' (That is, each row is a selected set.)
 #' @return The parameter B, corresponding to half of the subsamples for 
 #' sampling_type "SS".
 #' @author Gregory Faletto, Jacob Bien
-checkGetClusterPropsInput <- function(clusters, res, sampling_type){
+checkGetClusterSelMatrixInput <- function(clusters, res){
     stopifnot(is.matrix(res))
     stopifnot(all(res %in% c(0, 1)))
     p <- ncol(res)
-    if(sampling_type=="SS"){
-        B <- nrow(res)/2
-        stopifnot(B == round(B))
-    } else{
-        B <- nrow(res)
-    }
-    stopifnot(B > 0)
-
+    stopifnot(nrow(res) > 0)
     checkClusters(clusters, p)
-
-    return(as.integer(B))
-}
-
-#' Helper function to check the output of getClusterProps
-#'
-#' @param feat_sel_props A numeric
-#' vector of length p. The jth entry is the proportion of subsamples in which
-#' feature j was selected by fitfun.
-#' @param p Integer; the number of features in the X matrix provided to css.
-#' @param clus_sel_props_p A numeric vector
-#' of length p. The jth entry is the proportion of subsamples in which at least
-#' one member of the cluster containing feature j was selected.
-#' @param res_n_clusters A binary integer matrix with the same number of rows
-#' as res and length(clusters) columns. res_n_clusters[i, j] = 1 if at least
-#' one member of cluster j was selected on subsample i, and 0 otherwise.
-#' @param clusters A named list where each entry is an integer vector of indices
-#' of features that are in a common cluster, as in the output of formatClusters.
-#' (The length of list clusters is equal to the number of clusters.) All
-#' identified clusters must be non-overlapping, and all features must appear in
-#' exactly one cluster (any unclustered features should be in their own
-#' "cluster" of size 1).
-#' @param sampling_type
-#' @param B Integer; half of the subsamples for sampling_type "SS".
-#' @author Gregory Faletto, Jacob Bien
-checkGetClusterPropsOutput <- function(feat_sel_props, p, clus_sel_props_p,
-    res_n_clusters, clusters, sampling_type, B){
-    stopifnot(is.numeric(feat_sel_props))
-    stopifnot(length(feat_sel_props) == p)
-    stopifnot(all(feat_sel_props >= 0))
-    stopifnot(all(feat_sel_props <= 1))
-
-    stopifnot(is.numeric(clus_sel_props_p))
-    stopifnot(length(clus_sel_props_p) == p)
-    stopifnot(all(clus_sel_props_p >= 0))
-    stopifnot(all(clus_sel_props_p <= 1))
-
-    stopifnot(is.matrix(res_n_clusters))
-    stopifnot(identical(colnames(res_n_clusters), names(clusters)))
-    stopifnot(all(res_n_clusters %in% c(0, 1)))
-    stopifnot(ncol(res_n_clusters) == length(clusters))
-    if(sampling_type=="SS"){
-        stopifnot(B == nrow(res_n_clusters)/2)
-    } else{
-        stopifnot(B == nrow(res_n_clusters))
-    }
 }
 
 #' Helper function to check that the inputs to formCssDesign are as expected
