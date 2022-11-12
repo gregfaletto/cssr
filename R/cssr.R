@@ -651,9 +651,6 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
 
     sel_clusts <- sel_results$selected_clusts
 
-    print("sel_clusts:")
-    print(sel_clusts)
-
     n_sel_clusts <- length(sel_clusts)
 
     # Get prototypes (feature from each cluster with highest selection
@@ -1052,7 +1049,6 @@ createSubsamples <- function(n, p, B, sampling_type, prop_feats_remove=0){
     stopifnot(p == round(p))
     stopifnot(p > 0)
 
-    checkB(B)
     checkSamplingType(sampling_type)
     checkPropFeatsRemove(prop_feats_remove, p)
 
@@ -1211,7 +1207,6 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
     # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
-    checkB(B)
     checkSamplingType(sampling_type)
 
     # Get list of selected feature sets from subsamples
@@ -1330,6 +1325,8 @@ cssLoop <- function(input, x, y, lambda, fitfun){
 
     selected <- do.call(fitfun, list(X=x[subsample, feats_to_keep],
         y=y[subsample], lambda=lambda))
+
+    selected <- which(feats_to_keep)[selected]
 
     # Check output
     checkCssLoopOutput(selected, p, as.integer(which(feats_to_keep)))
@@ -3163,11 +3160,13 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
     if(length(selected) > p){
         stop("The provided feature selection method fitfun returned a vector of selected features longer than p on (at least) one subsample")
     }
-    if(max(selected) > p){
-        stop("The provided feature selection method fitfun returned a vector of selected features containing an index greater than ncol(X) on (at least) one subsample")
-    }
-    if(min(selected) <= 0){
-        stop("The provided feature selection method fitfun returned a vector of selected features containing a non-positive index on (at least) one subsample")
+    if(length(selected) > 0){
+        if(max(selected) > p){
+            stop("The provided feature selection method fitfun returned a vector of selected features containing an index greater than ncol(X) on (at least) one subsample")
+        }
+        if(min(selected) <= 0){
+            stop("The provided feature selection method fitfun returned a vector of selected features containing a non-positive index on (at least) one subsample")
+        }
     }
     if("try-error" %in% class(selected) |
         "error" %in% class(selected) | "simpleError" %in% class(selected) |
@@ -3175,6 +3174,10 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
         stop("The provided feature selection method fitfun returned an error on (at least) one subsample")
     }
     if(!all(selected %in% feats_on_subsamp)){
+        print("selected:")
+        print(selected)
+        print("feats_on_subsamp:")
+        print(feats_on_subsamp)
         stop("The provided feature selection method somehow selected features that were not provided for it to consider.")
     }
 }
