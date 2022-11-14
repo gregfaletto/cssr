@@ -1270,8 +1270,8 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
 #' 
 #' Runs provided feature selection method fitfun on each subsample for cluster
 #' stability selection (this function is called within mclapply).
-#' @param input Could be one of two things: \item{subsample}An integer vector of
-#' size `n/2` containing the indices of the observations in the subsample.}
+#' @param input Could be one of two things: \item{subsample}{An integer vector
+#' of size `n/2` containing the indices of the observations in the subsample.}
 #' \item{drop_var_input}{A named list containing two elements: one named
 #' "subsample" and the same as the previous description, and a logical vector
 #' named "feats_to_keep" containing the indices of the features to be
@@ -3119,11 +3119,14 @@ checkCssLassoInputs <- function(X, y, lambda){
     if(length(unique(y)) <= 1){
         stop("Subsample with only one unique value of y detected--for method cssLasso, all subsamples of y of size floor(n/2) must have more than one unique value.")
     }
-    if(length(lambda) != 1){
-        stop("For method cssLasso, lambda must be a numeric of length 1.")
-    }
     if(!is.numeric(lambda) & !is.integer(lambda)){
         stop("For method cssLasso, lambda must be a numeric.")
+    }
+    if(any(is.na(lambda))){
+        stop("NA detected in provided lambda input to cssLasso")
+    }
+    if(length(lambda) != 1){
+        stop("For method cssLasso, lambda must be a numeric of length 1.")
     }
     if(lambda < 0){
         stop("For method cssLasso, lambda must be nonnegative.")
@@ -3148,11 +3151,11 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
     if(!is.integer(selected) & !is.numeric(selected)){
         stop("The provided feature selection method fitfun failed to return an integer or numeric vector on (at least) one subsample")
     }
-    if(!all(selected == round(selected))){
-        stop("The provided feature selection method fitfun failed to return a vector of valid (integer) indices on (at least) one subsample")
-    }
     if(any(is.na(selected))){
         stop("The provided feature selection method fitfun returned a vector containing NA values on (at least) one subsample")
+    }
+    if(!all(selected == round(selected))){
+        stop("The provided feature selection method fitfun failed to return a vector of valid (integer) indices on (at least) one subsample")
     }
     if(length(selected) != length(unique(selected))){
         stop("The provided feature selection method fitfun returned a vector of selected features containing repeated indices on (at least) one subsample")
@@ -3174,10 +3177,6 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
         stop("The provided feature selection method fitfun returned an error on (at least) one subsample")
     }
     if(!all(selected %in% feats_on_subsamp)){
-        print("selected:")
-        print(selected)
-        print("feats_on_subsamp:")
-        print(feats_on_subsamp)
         stop("The provided feature selection method somehow selected features that were not provided for it to consider.")
     }
 }
@@ -3287,7 +3286,7 @@ checkFormatClustersInput <- function(clusters, p, clust_names,
     get_prototypes, x, y, R){
 
     if(any(is.na(clusters)) & any(is.na(R))){
-        stop("Must specify one of clusters or R.")
+        stop("Must specify one of clusters or R (or does one of these provided inputs contain NA?)")
     }
 
     stopifnot(is.integer(p) | is.numeric(p))
@@ -3546,6 +3545,7 @@ checkCssClustersInput <- function(clusters){
                 stopifnot(all(!is.na(clusters[[i]])))
                 stopifnot(is.integer(clusters[[i]]) | is.numeric(clusters[[i]]))
                 stopifnot(all(clusters[[i]] == round(clusters[[i]])))
+                stopifnot(all(clusters[[i]] >= 1))
                 clusters[[i]] <- as.integer(clusters[[i]])
             }
 
@@ -3570,6 +3570,7 @@ checkCssClustersInput <- function(clusters){
         stopifnot(all(!is.na(clusters)))
         stopifnot(is.integer(clusters) | is.numeric(clusters))
         stopifnot(all(clusters == round(clusters)))
+        stopifnot(all(clusters >= 1))
         clusters <- as.integer(clusters)
     }
     return(clusters)
