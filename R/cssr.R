@@ -3317,6 +3317,7 @@ checkFormatClustersInput <- function(clusters, p, clust_names,
             for(i in 1:length(clusters)){
                 stopifnot(length(clusters[[i]]) == length(unique(clusters[[i]])))
                 stopifnot(all(!is.na(clusters[[i]])))
+                stopifnot(all(clusters[[i]] >= 1))
                 stopifnot(is.integer(clusters[[i]]))
             }
 
