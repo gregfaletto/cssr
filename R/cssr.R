@@ -1,6 +1,8 @@
 # TODO @gfaletto: implement protolasso and clusterRepLasso (located in 
 # toy_ex_slide_funcs.R, in /Users/gregfaletto/Google Drive/Data Science/LaTeX/Generalized Stability Selection Presentation)
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Cluster Stability Selection
 #'
 #' Executes cluster stability selection algorithm. Takes subsamples of data,
@@ -1006,6 +1008,7 @@ cssPredict <- function(X_train, y_train, X_predict, clusters = list()
 #
 #
 
+### BELOW IS DONE AND IN RMD FILE
 
 #' Creates lists of subsamples for stability selection.
 #'
@@ -1098,6 +1101,8 @@ createSubsamples <- function(n, p, B, sampling_type, prop_feats_remove=0){
     stop("createSubsamples failed to return anything")
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Generate list of subsamples
 #'
 #` Generate list of `B` (or `2*B` for sampling_type="SS") subsamples of size
@@ -1154,6 +1159,8 @@ getSubsamps <- function(n, B, sampling_type){
     }
     return(subsamples)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Generates matrix of selection indicators from stability selection.
 #'
@@ -1266,6 +1273,8 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
     return(res)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function run on each subsample
 #' 
 #' Runs provided feature selection method fitfun on each subsample for cluster
@@ -1334,6 +1343,8 @@ cssLoop <- function(input, x, y, lambda, fitfun){
     return(as.integer(selected))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Provided fitfun implementing the lasso
 #'
 #' Function used to select features with the lasso on each subsample in cluster
@@ -1401,6 +1412,8 @@ cssLasso <- function(X, y, lambda){
     return(selected)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Formats clusters in standardized way, optionally estimating cluster
 #' prototypes
 #'
@@ -1410,7 +1423,8 @@ cssLasso <- function(X, y, lambda){
 #' vector.) If clusters is specified then R is ignored.
 #' @param p integer or numeric; the numbe of features in x (should match 
 #' ncol(x), if x is provided)
-#' @param clust_names A character vector of the names of the clusters in clusters.
+#' @param clust_names A character vector of the names of the clusters in
+#' clusters.
 #' @param get_prototypes Logical: if TRUE, will identify prototype from each
 #' cluster (the feature from each cluster that is most correlated with the
 #' response) for the protolasso. In this case, x and y must be provided.
@@ -1528,6 +1542,8 @@ formatClusters <- function(clusters=NA, p=-1, clust_names=NA,
     }
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Estimate prototypes from a list of clusters
 #'
 #' Takes in list of clusters, x, and y and returns an integer vector (of length
@@ -1596,6 +1612,8 @@ getPrototypes <- function(clusters, x, y){
     return(prototypes)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Estimate prototypes from a single cluster
 #'
 #' Takes in a single cluster, x, and y and returns an integer of the index of
@@ -1644,6 +1662,8 @@ identifyPrototype <- function(cluster_members_i, x, y){
 
     return(ret)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Get cluster selection matrix
 #'
@@ -2526,6 +2546,8 @@ getClustWeights <- function(cluster_i, weighting, feat_sel_props){
     return(weights_i)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Absolute value of sample correlation between two vectors
 #'
 #' Calculates the absolute value of correlation of t and y. If either input has
@@ -2613,6 +2635,8 @@ checkXInputResults <- function(newx, css_X){
 
     return(list(feat_names=feat_names, newx=newx))
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that inputs to the function css are as expected,
 #' and modify inputs if needed
@@ -2988,6 +3012,8 @@ checkWeighting <- function(weighting){
     }
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that the argument sampling_type to several 
 #' functions is as expected
 #'
@@ -3003,6 +3029,8 @@ checkSamplingType <- function(sampling_type){
         stop("sampling_type MB is not yet supported (and isn't recommended anyway)")
     }
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the argument prop_feats_remove to several 
 #' functions is as expected
@@ -3023,6 +3051,8 @@ checkPropFeatsRemove <- function(prop_feats_remove, p){
     }
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that the argument B to several functions is as
 #' expected
 #'
@@ -3042,6 +3072,8 @@ checkB <- function(B){
         warning("Large values of B may require long computation times.")
     }
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the argument clusters to several functions is
 #' as expected
@@ -3081,6 +3113,8 @@ checkClusters <- function(clusters, p){
     stopifnot(all(all_clustered_feats >= 1))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that the argument y to several functions is
 #' as expected
 #'
@@ -3091,8 +3125,15 @@ checkY <- function(y, n){
     stopifnot(all(!is.na(y)))
     stopifnot(is.numeric(y) | is.integer(y))
     stopifnot(length(unique(y)) > 1)
+    stopifnot(length(n) == 1)
+    stopifnot(!is.na(n))
+    stopifnot(is.numeric(n) | is.integer(n))
+    stopifnot(n == round(n))
+    stopifnot(n > 0)
     stopifnot(n == length(y))
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the inputs to cssLasso are as expected. 
 #'
@@ -3132,6 +3173,8 @@ checkCssLassoInputs <- function(X, y, lambda){
         stop("For method cssLasso, lambda must be nonnegative.")
     }
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the outputs of the provided feature selection
 #' method are as required. 
@@ -3254,6 +3297,8 @@ checkSelectedClusters <- function(n_sel_clusts, min_num_clusts, max_num_clusts,
         }
     }
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to ensure that the inputs to formatClusters are as expected
 #'
@@ -3393,6 +3438,8 @@ checkFormatClustersInput <- function(clusters, p, clust_names,
     return(clusters)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to check inputs to getClusterSelMatrix function
 #'
 #' @param clusters A named list where each entry is an integer vector of indices
@@ -3516,6 +3563,8 @@ checkGetSelectedClustersOutput <- function(selected_clusts, css_results,
     p <- ncol(css_results$feat_sel_mat)
     stopifnot(all(selected_feats %in% 1:p))
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that clusters input to css is as expected
 #'
