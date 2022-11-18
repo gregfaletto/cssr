@@ -582,10 +582,10 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 
     p <- ncol(css_results$feat_sel_mat)
 
-    checkMinNumClusts(min_num_clusts, p)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
 
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        css_results$clusters)
+        length(css_results$clusters))
 
     sel_results <- getSelectedClusters(css_results, weighting, cutoff,
         min_num_clusts, max_num_clusts)
@@ -643,10 +643,10 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
 
     p <- ncol(css_results$feat_sel_mat)
 
-    checkMinNumClusts(min_num_clusts, p)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
 
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        css_results$clusters)
+        length(css_results$clusters))
 
     sel_results <- getCssSelections(css_results, cutoff=cutoff,
         min_num_clusts=min_num_clusts, max_num_clusts=max_num_clusts)
@@ -762,10 +762,10 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 
     checkCutoff(cutoff)
     checkWeighting(weighting)
-    checkMinNumClusts(min_num_clusts, p)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
 
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        css_results$clusters)
+        length(css_results$clusters))
 
     # Take provided training design matrix and testX and turn them into
     # matrices of cluster representatives using information from css_results
@@ -1505,24 +1505,26 @@ formatClusters <- function(clusters=NA, p=-1, clust_names=NA,
     } else{
         # What clusters need names?
         unnamed_clusts <- which(is.na(names(clusters)) | names(clusters) == "")
-        proposed_clust_names <- paste("c", unnamed_clusts, sep="")
-        # Replace any proposed cluster names that are already in use
-        if(any(proposed_clust_names %in% names(clusters))){
-            proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste("c",
-                unnamed_clusts[proposed_clust_names %in% names(clusters)] + p,
-                sep="")
-        }
-        while_counter <- 0
-        while(any(proposed_clust_names %in% names(clusters))){
-            proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste(proposed_clust_names[proposed_clust_names %in% names(clusters)],
-                "_1", sep="")
-            while_counter <- while_counter + 1
-            if(while_counter >= 100){
-                stop("Function formatClusters stuck in an infinite while loop")
+        if(length(unnamed_clusts) > 0){
+            proposed_clust_names <- paste("c", unnamed_clusts, sep="")
+            # Replace any proposed cluster names that are already in use
+            if(any(proposed_clust_names %in% names(clusters))){
+                proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste("c",
+                    unnamed_clusts[proposed_clust_names %in% names(clusters)] + p,
+                    sep="")
             }
+            while_counter <- 0
+            while(any(proposed_clust_names %in% names(clusters))){
+                proposed_clust_names[proposed_clust_names %in% names(clusters)] <- paste(proposed_clust_names[proposed_clust_names %in% names(clusters)],
+                    "_1", sep="")
+                while_counter <- while_counter + 1
+                if(while_counter >= 100){
+                    stop("Function formatClusters stuck in an infinite while loop")
+                }
+            }
+            stopifnot(length(unnamed_clusts) == length(proposed_clust_names))
+            names(clusters)[unnamed_clusts] <- proposed_clust_names
         }
-        stopifnot(length(unnamed_clusts) == length(proposed_clust_names))
-        names(clusters)[unnamed_clusts] <- proposed_clust_names
     }
 
     # Check output
@@ -2219,7 +2221,7 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
     # Check that n_sel_clusts is as expected, and throw warnings or an error if
     # not
     checkSelectedClusters(n_sel_clusts, min_num_clusts, max_num_clusts,
-        clus_sel_props)
+        max(clus_sel_props))
     
     ### Get selected features from selected clusters
     clusters <- css_results$clusters
@@ -2244,8 +2246,9 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
 
     # Check output (already checked weights wihin getAllClustWeights)
 
-    checkGetSelectedClustersOutput(selected_clusts, css_results,
-        selected_feats)
+    checkGetSelectedClustersOutput(selected_clusts, 
+        selected_feats, n_clusters=length(clusters),
+        p=ncol(css_results$feat_sel_mat))
 
     return(list(selected_clusts=selected_clusts,
         selected_feats=selected_feats, weights=weights))
@@ -2391,6 +2394,7 @@ getModelSize <- function(X, y, clusters){
     return(as.integer(max(size, 1)))
 }
 
+### BELOW IS DONE AND IN RMD FILE
 
 #' Calculate weights for each cluster member of all of the selected clusters.
 #' 
@@ -2463,6 +2467,8 @@ getAllClustWeights <- function(css_results, sel_clusters, weighting){
     }
     return(weights)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Calculate weights for members of a cluster using selection proportions
 #'
@@ -2918,14 +2924,16 @@ checkGetCssPredsInputs <- function(css_results, testX, weighting, cutoff,
 
     checkCutoff(cutoff)
     checkWeighting(weighting)
-    checkMinNumClusts(min_num_clusts, p)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        css_results$clusters)
+        length(css_results$clusters))
 
     return(list(trainXProvided=trainXProvided, trainX=trainX, testX=testX,
         feat_names=feat_names, max_num_clusts=max_num_clusts))
 
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the argument cutoff to several functions is
 #' as expected
@@ -2942,6 +2950,8 @@ checkCutoff <- function(cutoff){
     stopifnot(cutoff <= 1)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that the argument min_num_clusts to several 
 #' functions is as expected
 #'
@@ -2951,15 +2961,20 @@ checkCutoff <- function(cutoff){
 #' min_num_clusts clusters are selected.)
 #' @param p The number of features; since this is an upper bound on the number
 #' of clusters of features, it is also an upper bound on min_num_clusts.
+#' @param n_clusters The number of clusters; note that this is an upper bound
+#' on min_num_clusts
 #' @author Gregory Faletto, Jacob Bien
-checkMinNumClusts <- function(min_num_clusts, p){
+checkMinNumClusts <- function(min_num_clusts, p, n_clusters){
     stopifnot(length(min_num_clusts) == 1)
     stopifnot(is.numeric(min_num_clusts) | is.integer(min_num_clusts))
     stopifnot(!is.na(min_num_clusts))
     stopifnot(min_num_clusts == round(min_num_clusts))
     stopifnot(min_num_clusts >= 1)
     stopifnot(min_num_clusts <= p)
+    stopifnot(min_num_clusts <= n_clusters)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the argument max_num_clusts to several 
 #' functions is as expected
@@ -2976,22 +2991,25 @@ checkMinNumClusts <- function(min_num_clusts, p){
 #' large as min_num_clusts.
 #' @param p The number of features; since this is an upper bound on the number
 #' of clusters of features, it is also an upper bound on max_num_clusts.
+#' @param n_clusters The number of clusters; note that this is an upper bound
+#' on max_num_clusts
 #' @return The provided max_num_clusts, coerced to an integer if needed, and
 #' coerced to be less than or equal to the total number of clusters.
 #' @author Gregory Faletto, Jacob Bien
-checkMaxNumClusts <- function(max_num_clusts, min_num_clusts, p, clusters){
+checkMaxNumClusts <- function(max_num_clusts, min_num_clusts, p, n_clusters){
     stopifnot(length(max_num_clusts) == 1)
     if(!is.na(max_num_clusts)){
         stopifnot(is.numeric(max_num_clusts) | is.integer(max_num_clusts))
         stopifnot(max_num_clusts == round(max_num_clusts))
-        stopifnot(max_num_clusts >= 0)
+        stopifnot(max_num_clusts >= 1)
         stopifnot(max_num_clusts <= p)
-        max_num_clusts <- as.integer(min(length(clusters),
-            max_num_clusts))
+        max_num_clusts <- as.integer(min(n_clusters, max_num_clusts))
         stopifnot(max_num_clusts >= min_num_clusts)
     }
     return(max_num_clusts)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the argument weighting to several 
 #' functions is as expected
@@ -3256,6 +3274,8 @@ checkNewXProvided <- function(trainX, css_results){
     return(list(newX=trainX, newXProvided=newXProvided))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to check operations within getSelectedClusters function
 #'
 #' @param n_sel_clusts The number of selected clusters; should be constrained
@@ -3270,14 +3290,14 @@ checkNewXProvided <- function(trainX, css_results){
 #' use regardless of cutoff. (That is, if the chosen cutoff returns more than
 #' max_num_clusts clusters, the cutoff will be decreased until at most
 #' max_num_clusts clusters are selected.) If NA, max_num_clusts is ignored.
-#' @param clus_sel_props Numeric; a vector of length equal to the number of
-#' clusters, containing the selection proportions of each cluster.
+#' @param max_sel_prop Numeric; the maximum selection proportion observed for 
+#' any cluster.
 #' @author Gregory Faletto, Jacob Bien
 checkSelectedClusters <- function(n_sel_clusts, min_num_clusts, max_num_clusts,
-    clus_sel_props){
+    max_sel_prop){
     if(n_sel_clusts == 0){
         err <- paste("No clusters selected with this cutoff (try a cutoff below the maximum cluster selection proportion, ",
-            max(clus_sel_props), ")", sep="")
+            max_sel_prop, ")", sep="")
         stop(err)
     }
 
@@ -3291,8 +3311,10 @@ checkSelectedClusters <- function(n_sel_clusts, min_num_clusts, max_num_clusts,
     }
     if(!is.na(max_num_clusts)){
         if(n_sel_clusts > max_num_clusts){
-            warn <- paste("Returning more than max_num_clusts = ", max_num_clusts,
-                " clusters because increasing the cutoff any further would require returning 0 clusters", sep="")
+            warn <- paste("Returning more than max_num_clusts = ",
+                max_num_clusts,
+                " clusters because increasing the cutoff any further would require returning 0 clusters",
+                sep="")
             warning(warn)
         }
     }
@@ -3531,9 +3553,9 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
 
     checkCutoff(cutoff)
     checkWeighting(weighting)
-    checkMinNumClusts(min_num_clusts, p)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        css_results$clusters)
+        length(css_results$clusters))
 
     return(list(newx=newx, max_num_clusts=max_num_clusts))
 }
@@ -3543,24 +3565,25 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
 #' @param selected_clusts A named numeric vector containing the selection
 #' proportions for the selected clusters. The name of each entry is the name of
 #' the corresponding cluster.
-#' @param css_results An object of class "cssr" (the output of the function
-#' css).
 #' @param selected_feats A named integer vector; the indices of the features
 #' with nonzero weights from all of the selected clusters.
+#' @param n_clusters Integer; the number of clusters in the data (upper bound
+#' for the length of selected_clusts)
+#' @param p Integer; number of features in the data (all selected_feats should
+#' be in 1:p)
 #' @author Gregory Faletto, Jacob Bien
-checkGetSelectedClustersOutput <- function(selected_clusts, css_results,
-    selected_feats){
+checkGetSelectedClustersOutput <- function(selected_clusts, selected_feats,
+    n_clusters, p){
     stopifnot(is.numeric(selected_clusts))
     stopifnot(all(selected_clusts >= 0))
     stopifnot(all(selected_clusts <= 1))
     stopifnot(length(selected_clusts) >= 1)
-    stopifnot(length(selected_clusts) <= length(css_results$clusters))
+    stopifnot(length(selected_clusts) <= n_clusters)
     stopifnot(length(names(selected_clusts)) ==
         length(unique(names(selected_clusts))))
 
     stopifnot(is.integer(selected_feats))
     stopifnot(length(selected_feats) == length(unique(selected_feats)))
-    p <- ncol(css_results$feat_sel_mat)
     stopifnot(all(selected_feats %in% 1:p))
 }
 
