@@ -3560,6 +3560,8 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
     return(list(newx=newx, max_num_clusts=max_num_clusts))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to check that output of getSelectedClusters is as expected
 #'
 #' @param selected_clusts A named numeric vector containing the selection
@@ -3581,10 +3583,13 @@ checkGetSelectedClustersOutput <- function(selected_clusts, selected_feats,
     stopifnot(length(selected_clusts) <= n_clusters)
     stopifnot(length(names(selected_clusts)) ==
         length(unique(names(selected_clusts))))
-
+    stopifnot(!is.null(names(selected_clusts)))
+    stopifnot(all(!is.na(names(selected_clusts)) &
+        names(selected_clusts) != ""))
     stopifnot(is.integer(selected_feats))
     stopifnot(length(selected_feats) == length(unique(selected_feats)))
     stopifnot(all(selected_feats %in% 1:p))
+    stopifnot(length(selected_clusts) <= length(selected_feats))
 }
 
 ### BELOW IS DONE AND IN RMD FILE
