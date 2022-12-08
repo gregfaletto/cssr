@@ -1,6 +1,10 @@
 # TODO @gfaletto: implement protolasso and clusterRepLasso (located in 
 # toy_ex_slide_funcs.R, in /Users/gregfaletto/Google Drive/Data Science/LaTeX/Generalized Stability Selection Presentation)
 
+# TODO @gfaletto: make sure behavior of functions makes sense if selection
+# indicator matrix ends up containing all 0s or all 1s (and maybe throw a
+# warning or error in this case)
+
 ### BELOW IS DONE AND IN RMD FILE
 
 #' Cluster Stability Selection
@@ -563,7 +567,7 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
 #' max_num_clusts clusters, the cutoff will be decreased until at most
 #' max_num_clusts clusters are selected.) Default is NA (in which case
 #' max_num_clusts is ignored).
-#' @return A named list with two items. \item{selected_clusts}{A list of
+#' @return A named list with two items. \item{selected_clusts}{A named list of
 #' integer vectors; each vector contains the indices of the features in one of
 #' the selected clusters.} \item{selected_feats}{A named integer vector; the
 #' indices of the features with nonzero weights from all of the selected
@@ -592,6 +596,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 
     sel_clust_names <- names(sel_results$selected_clusts)
 
+    stopifnot(length(sel_clust_names) >= 1)
     stopifnot(all(sel_clust_names %in% names(css_results$clusters)))
 
     sel_clusts <- list()
@@ -743,31 +748,7 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
     # Check inputs
     stopifnot(class(css_results) == "cssr")
 
-    check_results <- checkNewXProvided(newX, css_results)
-
-    newX <- check_results$newX
-    newXProvided <- check_results$newXProvided
-
-    rm(check_results)
-
-    n_train <- nrow(newX)
-
-    results <- checkXInputResults(newX, css_results$X)
-
-    newX <- results$newx
-    feat_names <- results$feat_names
-
-    rm(results)
-
-    n <- nrow(newX)
-    p <- ncol(newX)
-
-    checkCutoff(cutoff)
-    checkWeighting(weighting)
-    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
-
-    max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
-        length(css_results$clusters))
+    newXProvided <- checkNewXProvided(newX, css_results)$newXProvided
 
     # Take provided training design matrix and testX and turn them into
     # matrices of cluster representatives using information from css_results
@@ -2124,6 +2105,8 @@ formCssDesign <- function(css_results, weighting="weighted_avg", cutoff=0,
     return(X_clus_reps)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' From css output, obtain names of selected clusters and selection proportions,
 #' indices of all selected features, and weights of individual cluster members
 #'
@@ -2173,18 +2156,13 @@ formCssDesign <- function(css_results, weighting="weighted_avg", cutoff=0,
 #' with nonzero weights from all of the selected clusters.} \item{weights}{A
 #' named list of the same length as the number of selected clusters. Each list
 #' element weights[[j]] is a numeric  vector of the weights to use for the jth
-#' selected cluster, and it has the same name as the  cluster it corresponds
+#' selected cluster, and it has the same name as the cluster it corresponds
 #' to.}
 #' @author Gregory Faletto, Jacob Bien
 getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
     max_num_clusts){
     # Check input
-
-    stopifnot("clus_sel_mat" %in% names(css_results))
-    stopifnot("feat_sel_mat" %in% names(css_results))
-    stopifnot("clusters" %in% names(css_results))
-    stopifnot(all(colnames(css_results$clus_sel_mat) ==
-        names(css_results$clusters)))
+    stopifnot(class(css_results) == "cssr")
 
     # Eliminate clusters with selection proportions below cutoff
     clus_sel_props <- colMeans(css_results$clus_sel_mat)
@@ -2248,9 +2226,8 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
 
     # Check output (already checked weights wihin getAllClustWeights)
 
-    checkGetSelectedClustersOutput(selected_clusts, 
-        selected_feats, n_clusters=length(clusters),
-        p=ncol(css_results$feat_sel_mat))
+    checkGetSelectedClustersOutput(selected_clusts, selected_feats,
+        n_clusters=length(clusters), p=ncol(css_results$feat_sel_mat))
 
     return(list(selected_clusts=selected_clusts,
         selected_feats=selected_feats, weights=weights))
@@ -2462,7 +2439,8 @@ getAllClustWeights <- function(css_results, sel_clusters, weighting){
     stopifnot(is.list(weights))
 
     for(i in 1:p_ret){
-        stopifnot(length(clusters[[names(sel_clusters)[i]]]) == length(weights[[i]]))
+        stopifnot(length(clusters[[names(sel_clusters)[i]]]) ==
+            length(weights[[i]]))
         stopifnot(all(weights[[i]] >= 0))
         stopifnot(all(weights[[i]] <= 1))
         stopifnot(abs(sum(weights[[i]]) - 1) < 10^(-6))
@@ -2581,6 +2559,8 @@ corFunction <- function(t, y){
     return(abs(stats::cor(t, y)))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that inputs to several functions are as expected,
 #' and modify inputs if needed
 #'
@@ -2590,15 +2570,9 @@ corFunction <- function(t, y){
 #' representatives. Must contain the same features (in the same
 #' number of columns) as the X matrix provided to css, and if the columns of
 #' newX are labeled, the names must match the variable names provided to css.
-#' newX may be omitted if train_inds were provided to css to set aside
-#' observations for model estimation. If this is the case, then when newX is
-#' omitted getCssDesign will return a design matrix of cluster representatives
-#' formed from the train_inds observations from the matrix X provided to css.
-#' (If no train_inds were provided to css, newX must be provided to
-#' getCssDesign.) Default is NA.
 #' @param css_X The X matrix provided to css, as in the output of the css
 #' function (after having been coerced from a data.frame to a matrix by css if
-#' needed.
+#' needed).
 #' @return A named list with the following elements. \item{feat_names}{A 
 #' character vector containing the column names of newx (if the provided newx
 #' had column names). If the provided newx did not have column names, feat_names
@@ -2633,9 +2607,12 @@ checkXInputResults <- function(newx, css_X){
 
     # Confirm that newx matches css_results$X
     if(p != ncol(css_X)){
-        stop("Number of columns in newx must match number of columns from matrix provided to css")
+        err <- paste("Number of columns in newx must match number of columns from matrix provided to css. Number of columns in new provided X: ",
+            p, ". Number of columns in matrix provided to css: ", ncol(css_X),
+            ".", sep="")
+        stop(err)
     }
-    if(length(feat_names) != 1){
+    if(length(feat_names) != 1 & all(!is.na(feat_names))){
         if(!identical(feat_names, colnames(css_X))){
             stop("Provided feature names for newx do not match feature names provided to css")
         }
@@ -2728,10 +2705,6 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
     stopifnot(is.matrix(X) | is.data.frame(X))
 
-    feat_names <- as.character(NA)
-    if(!is.null(colnames(X))){
-        feat_names <- colnames(X)
-    }
     clust_names <- as.character(NA)
     if(!is.null(names(clusters))){
         clust_names <- names(clusters)
@@ -2747,6 +2720,11 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
     n <- nrow(X)
     p <- ncol(X)
+
+    feat_names <- as.character(NA)
+    if(!is.null(colnames(X))){
+        feat_names <- colnames(X)
+    }
 
     stopifnot(p >= 2)
     if(length(feat_names) > 1){
@@ -3267,15 +3245,22 @@ checkNewXProvided <- function(trainX, css_results){
 
     if(all(!is.na(trainX)) & length(trainX) > 1){
         newXProvided <- TRUE
-        trainX <- checkXInputResults(trainX, css_results$X)$newx
+        res <- checkXInputResults(trainX, css_results$X)
+        
+        trainX <- res$newx
+        feat_names <- res$feat_names
+        
+        rm(res)
+        
         n_train <- nrow(trainX)
         stopifnot(n_train > 1)
     } else{
         if(length(css_results$train_inds) == 0){
             stop("css was not provided with indices to set aside for model training (train_inds), so must provide new X in order to generate a design matrix")
         }
+        feat_names <- checkXInputResults(trainX, css_results$X)$feat_names
     } 
-    return(list(newX=trainX, newXProvided=newXProvided))
+    return(list(newX=trainX, newXProvided=newXProvided, feat_names=feat_names))
 }
 
 ### BELOW IS DONE AND IN RMD FILE
@@ -3304,6 +3289,8 @@ checkSelectedClusters <- function(n_sel_clusts, min_num_clusts, max_num_clusts,
             max_sel_prop, ")", sep="")
         stop(err)
     }
+
+    stopifnot(n_sel_clusts >= 1)
 
     # It may be impossible to get at least min_num_clusts or at most
     # max_num_clusts; if so, give a warning
@@ -3590,6 +3577,7 @@ checkGetSelectedClustersOutput <- function(selected_clusts, selected_feats,
     stopifnot(!is.null(names(selected_clusts)))
     stopifnot(all(!is.na(names(selected_clusts)) &
         names(selected_clusts) != ""))
+    stopifnot(length(names(selected_clusts)) == length(selected_clusts))
     stopifnot(is.integer(selected_feats))
     stopifnot(length(selected_feats) == length(unique(selected_feats)))
     stopifnot(all(selected_feats %in% 1:p))
