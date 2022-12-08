@@ -686,6 +686,8 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
     return(print_df)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Obtain a design matrix of cluster representatives
 #'
 #' Takes a matrix of observations from the original feature space and returns
@@ -3241,6 +3243,8 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
         stop("The provided feature selection method somehow selected features that were not provided for it to consider.")
     }
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to confirm that the new X matrix provided to getCssDesign or
 #' getCssPreds matches the characteristics of the X that was provided to css.
