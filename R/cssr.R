@@ -748,7 +748,31 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
     # Check inputs
     stopifnot(class(css_results) == "cssr")
 
-    newXProvided <- checkNewXProvided(newX, css_results)$newXProvided
+    check_results <- checkNewXProvided(newX, css_results)
+
+    newX <- check_results$newX
+    newXProvided <- check_results$newXProvided
+
+    rm(check_results)
+
+    n_train <- nrow(newX)
+
+    results <- checkXInputResults(newX, css_results$X)
+
+    newX <- results$newx
+    feat_names <- results$feat_names
+
+    rm(results)
+
+    n <- nrow(newX)
+    p <- ncol(newX)
+
+    checkCutoff(cutoff)
+    checkWeighting(weighting)
+    checkMinNumClusts(min_num_clusts, p, length(css_results$clusters))
+
+    max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
+        length(css_results$clusters))
 
     # Take provided training design matrix and testX and turn them into
     # matrices of cluster representatives using information from css_results
@@ -2705,6 +2729,11 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
     stopifnot(is.matrix(X) | is.data.frame(X))
 
+    feat_names <- as.character(NA)
+    if(!is.null(colnames(X))){
+        feat_names <- colnames(X)
+    }
+
     clust_names <- as.character(NA)
     if(!is.null(names(clusters))){
         clust_names <- names(clusters)
@@ -2721,7 +2750,6 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     n <- nrow(X)
     p <- ncol(X)
 
-    feat_names <- as.character(NA)
     if(!is.null(colnames(X))){
         feat_names <- colnames(X)
     }
@@ -3245,12 +3273,7 @@ checkNewXProvided <- function(trainX, css_results){
 
     if(all(!is.na(trainX)) & length(trainX) > 1){
         newXProvided <- TRUE
-        res <- checkXInputResults(trainX, css_results$X)
-        
-        trainX <- res$newx
-        feat_names <- res$feat_names
-        
-        rm(res)
+        trainX <- checkXInputResults(trainX, css_results$X)$newx
         
         n_train <- nrow(trainX)
         stopifnot(n_train > 1)
@@ -3258,9 +3281,8 @@ checkNewXProvided <- function(trainX, css_results){
         if(length(css_results$train_inds) == 0){
             stop("css was not provided with indices to set aside for model training (train_inds), so must provide new X in order to generate a design matrix")
         }
-        feat_names <- checkXInputResults(trainX, css_results$X)$feat_names
     } 
-    return(list(newX=trainX, newXProvided=newXProvided, feat_names=feat_names))
+    return(list(newX=trainX, newXProvided=newXProvided))
 }
 
 ### BELOW IS DONE AND IN RMD FILE
