@@ -2605,14 +2605,21 @@ corFunction <- function(t, y){
 #' @author Gregory Faletto, Jacob Bien
 checkXInputResults <- function(newx, css_X){
 
-    feat_names <- as.character(NA)
-    if(!is.null(colnames(newx))){
-        feat_names <- colnames(newx)
-    }
-
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(newx)){
         newx <- stats::model.matrix(~ ., newx)
+    }
+
+    feat_names <- as.character(NA)
+    if(!is.null(colnames(newx))){
+        feat_names <- colnames(newx)
+        stopifnot(identical(feat_names, colnames(css_X)))
+    } else{
+        # In this case, newx has no column names, so same better be true of
+        # css_X
+        if(!is.null(colnames(css_X))){
+            warning("New X provided had no variable names (column names) even though the X provided to css did.")
+        }
     }
 
     stopifnot(is.matrix(newx))
