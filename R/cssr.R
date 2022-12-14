@@ -2016,6 +2016,8 @@ genMuXZSd <- function(n, p, beta, Sigma, blocked_dgp_vars,
     return(list(X=x, mu=mu, z=z, sd=sd))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Create design matrix of cluster representatives from matrix of raw features
 #' using results of css function
 #'
@@ -3503,6 +3505,8 @@ checkGetClusterSelMatrixInput <- function(clusters, res){
     stopifnot(nrow(res) > 0)
     checkClusters(clusters, p)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Helper function to check that the inputs to formCssDesign are as expected
 #'
