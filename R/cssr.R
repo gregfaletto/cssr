@@ -2084,15 +2084,10 @@ formCssDesign <- function(css_results, weighting="weighted_avg", cutoff=0,
 
     # Get the names of the selected clusters and the weights for the features
     # within each cluster, according to the provided weighting rule
-    clust_sel_results <- getSelectedClusters(css_results, weighting, cutoff,
-        min_num_clusts, max_num_clusts)
+    weights <- getSelectedClusters(css_results, weighting, cutoff,
+        min_num_clusts, max_num_clusts)$weights
 
-    selected_clusts <- clust_sel_results$selected_clusts
-    weights <- clust_sel_results$weights
-
-    rm(clust_sel_results)
-
-    n_sel_clusts <- length(selected_clusts)
+    n_sel_clusts <- length(weights)
 
     # Form matrix of cluster representatives of selected clusters
     X_clus_reps <- matrix(rep(as.numeric(NA), n*n_sel_clusts), nrow=n,
@@ -2100,7 +2095,7 @@ formCssDesign <- function(css_results, weighting="weighted_avg", cutoff=0,
     colnames(X_clus_reps) <- rep(as.character(NA), n_sel_clusts)
 
     for(i in 1:n_sel_clusts){
-        clust_i_name <- names(selected_clusts)[i]
+        clust_i_name <- names(weights)[i]
 
         stopifnot(length(clust_i_name) == 1)
         stopifnot(clust_i_name %in% names(weights))
@@ -2181,7 +2176,7 @@ formCssDesign <- function(css_results, weighting="weighted_avg", cutoff=0,
 #' \item{selected_feats}{A named integer vector; the indices of the features
 #' with nonzero weights from all of the selected clusters.} \item{weights}{A
 #' named list of the same length as the number of selected clusters. Each list
-#' element weights[[j]] is a numeric  vector of the weights to use for the jth
+#' element weights[[j]] is a numeric vector of the weights to use for the jth
 #' selected cluster, and it has the same name as the cluster it corresponds
 #' to.}
 #' @author Gregory Faletto, Jacob Bien
@@ -2253,7 +2248,7 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
     # Check output (already checked weights wihin getAllClustWeights)
 
     checkGetSelectedClustersOutput(selected_clusts, selected_feats,
-        n_clusters=length(clusters), p=ncol(css_results$feat_sel_mat))
+        weights, n_clusters=length(clusters), p=ncol(css_results$feat_sel_mat))
 
     return(list(selected_clusts=selected_clusts,
         selected_feats=selected_feats, weights=weights))
@@ -3584,8 +3579,6 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
     return(list(newx=newx, max_num_clusts=max_num_clusts))
 }
 
-### BELOW IS DONE AND IN RMD FILE
-
 #' Helper function to check that output of getSelectedClusters is as expected
 #'
 #' @param selected_clusts A named numeric vector containing the selection
@@ -3593,13 +3586,17 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
 #' the corresponding cluster.
 #' @param selected_feats A named integer vector; the indices of the features
 #' with nonzero weights from all of the selected clusters.
+#' @param weights A named list of the same length as the number of selected
+#' clusters. Each list element weights[[j]] is a numeric vector of the weights
+#' to use for the jth selected cluster, and it has the same name as the cluster
+#' it corresponds to.
 #' @param n_clusters Integer; the number of clusters in the data (upper bound
 #' for the length of selected_clusts)
 #' @param p Integer; number of features in the data (all selected_feats should
 #' be in 1:p)
 #' @author Gregory Faletto, Jacob Bien
 checkGetSelectedClustersOutput <- function(selected_clusts, selected_feats,
-    n_clusters, p){
+    weights, n_clusters, p){
     stopifnot(is.numeric(selected_clusts))
     stopifnot(all(selected_clusts >= 0))
     stopifnot(all(selected_clusts <= 1))
@@ -3615,6 +3612,8 @@ checkGetSelectedClustersOutput <- function(selected_clusts, selected_feats,
     stopifnot(length(selected_feats) == length(unique(selected_feats)))
     stopifnot(all(selected_feats %in% 1:p))
     stopifnot(length(selected_clusts) <= length(selected_feats))
+    stopifnot(identical(names(weights), names(selected_clusts)))
+    stopifnot(length(weights) == length(selected_clusts))
 }
 
 ### BELOW IS DONE AND IN RMD FILE
