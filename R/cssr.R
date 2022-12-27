@@ -390,6 +390,8 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
     return(lambda_ret)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Fit model and generate predictions from new data
 #'
 #' Generate predictions on test data using cluster stability-selected model.
@@ -2812,6 +2814,8 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     return(list(feat_names=feat_names, X=X, clusters=clusters))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Helper function to confirm that inputs to the function getCssPreds are as
 #' expected, and modify inputs if needed.
 #'
@@ -3267,9 +3271,11 @@ checkCssLoopOutput <- function(selected, p, feats_on_subsamp){
 #' provided to css to set aside observations.
 #' @param css_results An object of class "cssr" (the output of the function
 #' css).
-#' @return A named list with the following elements: \item{newX}{The provided
-#' trainX matrix, coerced from a data.frame to a matrix if the provided trainX
-#' was a data.frame.} \item{newXProvided}{Logical; indicates whether a valid
+#' @return A named list with the following elements: \item{newX}{If trainX was
+#' provided, this is the provided trainX matrix, coerced from a data.frame to a
+#' matrix if the provided trainX was a data.frame. If trainX was not provided,
+#' this is a matrix made up of the training indices provided to css in the
+#' train_inds argument.} \item{newXProvided}{Logical; indicates whether a valid
 #' trainX input was provided.}
 #' @author Gregory Faletto, Jacob Bien
 checkNewXProvided <- function(trainX, css_results){
