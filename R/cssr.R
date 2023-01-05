@@ -2816,6 +2816,11 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
 ### BELOW IS DONE AND IN RMD FILE
 
+# TODO(gfaletto): if you provide a data.frame to css and some rows of the same
+# data.frame to checkGetCssPredsInputs, checkGetCssPredsInputs gives the
+# warning "Column names were provided for trainX but not for testX (are you sure
+# they both contain identical features in the same order?)"
+
 #' Helper function to confirm that inputs to the function getCssPreds are as
 #' expected, and modify inputs if needed.
 #'
