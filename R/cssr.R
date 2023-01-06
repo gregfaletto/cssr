@@ -2356,6 +2356,7 @@ getModelSize <- function(X, y, clusters){
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X)){
         X <- stats::model.matrix(~ ., X)
+        X <- X[, colnames(X) != "(Intercept)"]
     }
 
     stopifnot(is.matrix(X))
@@ -2607,6 +2608,7 @@ checkXInputResults <- function(newx, css_X){
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(newx)){
         newx <- stats::model.matrix(~ ., newx)
+        newx <- newx[, colnames(newx) != "(Intercept)"]
     }
 
     feat_names <- as.character(NA)
@@ -2748,6 +2750,7 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X)){
         X <- stats::model.matrix(~ ., X)
+        X <- X[, colnames(X) != "(Intercept)"]
     }
 
     stopifnot(is.matrix(X))
