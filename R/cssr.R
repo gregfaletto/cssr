@@ -447,8 +447,7 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
 #' observations were set aside for model estimation by the parameter train_inds
 #' in the css function call. Default is NA (in which case getCssPreds uses the
 #' observations from the train_inds that were provided to css).
-#' @return \item{predictions}{A vector of predictions corresponding to the
-#' observations from testX.}
+#' @return A vector of predictions corresponding to the observations from testX.
 #' @author Gregory Faletto, Jacob Bien
 #' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
 #' \emph{arXiv preprint arXiv:2201.00494}.
@@ -509,10 +508,10 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
         clust_X_names <- colnames(train_X_clusters)
     }
 
-     # Fit linear model on training data via OLS
-    if(length(css_results$train_inds) < ncol(train_X_clusters)){
+    # Fit linear model on training data via OLS
+    if(nrow(train_X_clusters) < ncol(train_X_clusters)){
         err_mess <- paste("css not provided with enough indices to fit OLS model for predictions (number of training indices: ",
-            length(css_results$train_inds), ", number of clusters: ",
+            nrow(train_X_clusters), ", number of clusters: ",
             ncol(train_X_clusters),
             "). Try reducing number of clusters by increasing cutoff, or re-run css with a larger number of training indices.",
             sep="")
