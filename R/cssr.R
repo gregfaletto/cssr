@@ -2337,6 +2337,7 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
 #' @references Reid, S., & Tibshirani, R. (2016). Sparse regression and marginal
 #' testing using cluster prototypes. \emph{Biostatistics}, 17(2), 364–376.
 #' \url{https://doi.org/10.1093/biostatistics/kxv049}.
+#' @export
 getModelSize <- function(X, y, clusters){
     n <- nrow(X)
 
