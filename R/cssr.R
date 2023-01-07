@@ -2631,6 +2631,7 @@ checkXInputResults <- function(newx, css_X){
     stopifnot(p >= 2)
     if(length(feat_names) > 1){
         stopifnot(length(feat_names) == p)
+        stopifnot(!("(Intercept)" %in% feat_names))
     } else{
         stopifnot(is.na(feat_names))
     }
@@ -2819,11 +2820,6 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
 ### BELOW IS DONE AND IN RMD FILE
 
-# TODO(gfaletto): if you provide a data.frame to css and some rows of the same
-# data.frame to checkGetCssPredsInputs, checkGetCssPredsInputs gives the
-# warning "Column names were provided for trainX but not for testX (are you sure
-# they both contain identical features in the same order?)"
-
 #' Helper function to confirm that inputs to the function getCssPreds are as
 #' expected, and modify inputs if needed.
 #'
@@ -2928,6 +2924,12 @@ checkGetCssPredsInputs <- function(css_results, testX, weighting, cutoff,
 
     testX <- results$newx
     feat_names <- results$feat_names
+
+    if(all(!is.na(feat_names))){
+        stopifnot(length(feat_names) == ncol(testX))
+        stopifnot(!("(Intercept)" %in% feat_names))
+        colnames(testX) <- feat_names
+    }
 
     rm(results)
 
