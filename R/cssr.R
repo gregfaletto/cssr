@@ -177,6 +177,8 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
     return(ret)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 # TODO @gfaletto change cluster_size into a vector of sizes (maybe also
 # deprecate n_clusters as an input, since this would be inferred by the length
 # of cluster_sizes?)
@@ -252,6 +254,39 @@ genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
     snr=as.numeric(NA), sigma_eps_sq=as.numeric(NA)){
 
     # Check inputs
+    checkGenLatentDataInputs(p, k_unclustered, cluster_size, n_clusters,
+        sig_clusters, rho, var, beta_latent, beta_unclustered, snr,
+        sigma_eps_sq)
+
+    # Generate covariance matrix (latent features are mixed in matrix, so each
+    # cluster will be of size cluster_size + 1)
+    Sigma <- makeCovarianceMatrix(p + n_clusters, n_clusters, cluster_size +
+        1, rho, var)
+
+    # Generate coefficients
+    # Note that beta has length p + sig_clusters
+    coefs <- makeCoefficients(p + n_clusters, k_unclustered, beta_unclustered,
+        beta_latent, n_clusters, sig_clusters, cluster_size + 1)
+
+    # Generate mu, X, z, sd, y
+    gen_mu_x_z_sd_res <- genMuXZSd(n, p, coefs$beta, Sigma,
+        coefs$blocked_dgp_vars, coefs$latent_vars, n_clusters,
+        cluster_size, snr, sigma_eps_sq)
+
+    mu <- gen_mu_x_z_sd_res$mu
+    sd <- gen_mu_x_z_sd_res$sd
+
+    y <- mu + sd * stats::rnorm(n)
+
+    return(list(X=gen_mu_x_z_sd_res$X, y=y, Z=gen_mu_x_z_sd_res$z, mu=mu))
+}
+
+### BELOW IS DONE AND IN RMD FILE
+
+checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
+    n_clusters, sig_clusters, rho, var, beta_latent, beta_unclustered, snr,
+    sigma_eps_sq){
+
     stopifnot(sig_clusters <= n_clusters)
     stopifnot(sig_clusters >= 0)
     stopifnot(sig_clusters == round(sig_clusters))
@@ -261,7 +296,7 @@ genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
     stopifnot(n_clusters == round(n_clusters))
     stopifnot(p >= n_clusters*cluster_size + k_unclustered)
     stopifnot(abs(rho) <= abs(var))
-    # TODO(gfaletto): is it easy to remove the requirement that n_clusters is
+    # TODO(gregfaletto): is it easy to remove the requirement that n_clusters is
     # at least 1 (so that it's possible to generate data with no latent 
     # features)? If so, should only check that cluster_size >= 1 if n_clusters
     # >= 1, and in makeCovarianceMatrix function only need block_size >= 1
@@ -269,7 +304,7 @@ genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
     stopifnot(n_clusters >= 1)
     stopifnot(cluster_size >= 1)
     stopifnot(rho != 0)
-    stopifnot(var != 0)
+    stopifnot(var > 0)
 
     stopifnot(beta_latent != 0)
     stopifnot(beta_unclustered != 0)
@@ -284,45 +319,14 @@ genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
     if(is.na(snr) & is.na(sigma_eps_sq)){
         stop("Must specify one of snr or sigma_eps_sq")
     }
-
-    # Generate covariance matrix (latent features are mixed in matrix, so each
-    # cluster will be of size cluster_size + 1)
-
-    Sigma <- makeCovarianceMatrix(p + n_clusters, n_clusters, cluster_size +
-        1, rho, var)
-
-    # Generate coefficients
-    # Note that beta has length p + sig_clusters
-    coefs <- makeCoefficients(p + n_clusters, k_unclustered, beta_unclustered,
-        beta_latent, n_clusters, sig_clusters, cluster_size + 1)
-
-    # Generate mu, X, z, sd, y
-    gen_mu_x_z_sd_res <- genMuXZSd(n, p, coefs$beta, Sigma,
-        coefs$blocked_dgp_vars, coefs$latent_vars, n_clusters,
-        cluster_size, snr, sigma_eps_sq)
-
-    # Note that X is n x p
-    X <- gen_mu_x_z_sd_res$X
-
-    stopifnot(nrow(X) == n)
-    stopifnot(ncol(X) == p)
-
-    # Z is a vector if n_clusters = 1; if n_clusters > 1, Z is a n x n_clusters
-    # matrix
-    Z <- gen_mu_x_z_sd_res$z
-
-    # Note that mu has length n
-    mu <- gen_mu_x_z_sd_res$mu
-    sd <- gen_mu_x_z_sd_res$sd
-
-    y <- mu + sd * stats::rnorm(n)
-
-    return(list(X=X, y=y, Z=Z, mu=mu))
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Get lambda value for lasso
 #'
-#' Chooses a lambda value for the lasso by cross-validation.
+#' Chooses a lambda value for the lasso used on a subsample of size n/2 (as in
+#' cluster stability selection) by cross-validation.
 #' @param X An n x p numeric matrix (preferably) or a data.frame (which will
 #' be coerced internally to a matrix by the function model.matrix) containing
 #' the p >= 2 features/predictors that will be used by cluster stability
@@ -610,6 +614,8 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
         selected_feats=sel_results$selected_feats))
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Print cluster stabilty selection output
 #'
 #' Print a summary of the information from the css function.
@@ -788,6 +794,8 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
     return(newX_clusters)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Obtain a selected set of clusters and features using cluster stability
 #' selection
 #'
@@ -884,6 +892,8 @@ cssSelect <- function(X, y, clusters = list()
         min_num_clusts=1, max_num_clusts=max_num_clusts)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Wrapper function to generate predictions from cluster stability selected
 #' model in one step
 #'
@@ -967,7 +977,6 @@ cssPredict <- function(X_train, y_train, X_predict, clusters = list()
     stopifnot(!is.na(auto_select_size))
     stopifnot(length(auto_select_size) == 1)
     stopifnot(is.logical(auto_select_size))
-
 
     n <- nrow(X_train)
 
@@ -1729,6 +1738,8 @@ getClusterSelMatrix <- function(clusters, res){
     return(res_n_clusters)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Generate covariance matrix for simulated clustered data
 #'
 #' @param p Integer or numeric; the total number of features in the covariance
@@ -1788,6 +1799,8 @@ makeCovarianceMatrix <- function(p, nblocks, block_size, rho, var) {
 
     return(Sigma)
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Generated coefficients for y in latent variable model
 #'
@@ -1906,6 +1919,8 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
         sig_unblocked_vars=sig_unblocked_vars,
         insig_blocked_vars=insig_blocked_vars, latent_vars=latent_vars))
 }
+
+### BELOW IS DONE AND IN RMD FILE
 
 #' Generate observed and latent variables along with conditional mean
 #'
@@ -2306,6 +2321,8 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
     return(prototypes)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Automated estimation of model size
 #'
 #' This function is used internally by the functions cssSelect and cssPredict
@@ -2379,7 +2396,6 @@ getModelSize <- function(X, y, clusters){
         if(length(feats_to_drop) > 0){
             X_size <- X_size[, -1*feats_to_drop]
         }
-        
     }
 
     size_results <- glmnet::cv.glmnet(x=X_size, y=y, family="gaussian")
