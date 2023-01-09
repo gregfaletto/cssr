@@ -287,22 +287,23 @@ checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
     n_clusters, sig_clusters, rho, var, beta_latent, beta_unclustered, snr,
     sigma_eps_sq){
 
+    stopifnot(is.numeric(sig_clusters) | is.integer(sig_clusters))
     stopifnot(sig_clusters <= n_clusters)
     stopifnot(sig_clusters >= 0)
     stopifnot(sig_clusters == round(sig_clusters))
-    stopifnot(is.numeric(sig_clusters) | is.integer(sig_clusters))
-
+    
     stopifnot(is.numeric(n_clusters) | is.integer(n_clusters))
     stopifnot(n_clusters == round(n_clusters))
-    stopifnot(p >= n_clusters*cluster_size + k_unclustered)
-    stopifnot(abs(rho) <= abs(var))
     # TODO(gregfaletto): is it easy to remove the requirement that n_clusters is
     # at least 1 (so that it's possible to generate data with no latent 
     # features)? If so, should only check that cluster_size >= 1 if n_clusters
     # >= 1, and in makeCovarianceMatrix function only need block_size >= 1
     # rather than 2.
     stopifnot(n_clusters >= 1)
+
     stopifnot(cluster_size >= 1)
+
+    stopifnot(abs(rho) <= abs(var))
     stopifnot(rho != 0)
     stopifnot(var > 0)
 
@@ -313,11 +314,20 @@ checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
     stopifnot(k_unclustered >= 0)
     stopifnot(k_unclustered == round(k_unclustered))
 
+    stopifnot(p >= n_clusters*cluster_size + k_unclustered)
+
     # Same as make_sparse_blocked_linear_model_random, but ith coefficient
     # of weak signal features is beta_unclustered/sqrt(i) in order to have
     # a definitive ranking of weak signal features.
     if(is.na(snr) & is.na(sigma_eps_sq)){
         stop("Must specify one of snr or sigma_eps_sq")
+    }
+
+    if(!is.na(snr)){
+        stopifnot(snr > 0)
+    }
+    if(!is.na(sigma_eps_sq)){
+        stopifnot(sigma_eps_sq > 0)
     }
 }
 
@@ -1766,12 +1776,12 @@ getClusterSelMatrix <- function(clusters, res){
 makeCovarianceMatrix <- function(p, nblocks, block_size, rho, var) {
     # Check inputs
 
-    stopifnot(p >= nblocks*block_size)
-    stopifnot(abs(rho) <= abs(var))
     stopifnot(nblocks >= 1)
     stopifnot(rho != 0)
     stopifnot(var != 0)
+    stopifnot(abs(rho) <= abs(var))
     stopifnot(block_size >= 2)
+    stopifnot(p >= nblocks*block_size)
 
     # start with p x p identity matrix
     Sigma <- var*diag(p)
@@ -1794,6 +1804,7 @@ makeCovarianceMatrix <- function(p, nblocks, block_size, rho, var) {
         }
     }
     stopifnot(is.numeric(Sigma))
+    stopifnot(is.matrix(Sigma))
     stopifnot(nrow(Sigma) == p & ncol(Sigma) == p)
     stopifnot(all(Sigma == t(Sigma)))
 
@@ -1855,8 +1866,8 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
 
     # Check inputs
     stopifnot(k_unblocked >= 0)
-    stopifnot(p >= nblocks*block_size + k_unblocked)
     stopifnot(sig_blocks <= nblocks)
+    stopifnot(p >= nblocks*block_size + k_unblocked)
     stopifnot(sig_blocks >= 0)
 
     # Initialize beta
@@ -1875,6 +1886,8 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
     }
 
     blocked_dgp_vars <- latent_vars[1:sig_blocks]
+
+    stopifnot(sig_blocks == length(blocked_dgp_vars))
     
     beta[blocked_dgp_vars] <- beta_high
 
@@ -1910,7 +1923,7 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
     stopifnot(length(insig_blocked_vars) + length(blocked_dgp_vars) ==
         nblocks*block_size)
 
-    stopifnot(nblocks*block_size + length(insig_blocked_vars) <= p)
+    stopifnot(sig_blocks + length(insig_blocked_vars) + k_unblocked <= p)
 
     stopifnot(sum(beta != 0) == sig_blocks + k_unblocked)
     stopifnot(is.numeric(beta) | is.integer(beta))
