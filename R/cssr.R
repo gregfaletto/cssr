@@ -1978,9 +1978,10 @@ genMuXZSd <- function(n, p, beta, Sigma, blocked_dgp_vars,
     latent_vars, n_blocks=1, block_size, snr=NA, sigma_eps_sq=NA){
     # Check inputs
 
+    stopifnot(length(blocked_dgp_vars) <= n_blocks)
     stopifnot(nrow(Sigma) == p + n_blocks)
     stopifnot(ncol(Sigma) == p + n_blocks)
-    stopifnot(length(blocked_dgp_vars) <= n_blocks)
+    
     if(any(!is.na(sigma_eps_sq))){
         stopifnot(is.numeric(sigma_eps_sq) | is.integer(sigma_eps_sq))
         stopifnot(length(sigma_eps_sq) == 1)
@@ -2007,9 +2008,16 @@ genMuXZSd <- function(n, p, beta, Sigma, blocked_dgp_vars,
 
     # Remove true blocked signal feature from each block from x now that I've
     # generated mu
-    z <- NA
+    if(n_blocks > 0){
+        z <- matrix(as.numeric(NA), nrow=n, ncol=n_blocks)
+        stopifnot(length(latent_vars) > 0)
+    } else{
+        z <- NA
+        stopifnot(length(latent_vars) == 0)
+    }
+    
     if(length(latent_vars) > 0){
-        z <- x[, latent_vars]
+        z[, 1:n_blocks] <- x[, latent_vars]
     }
     
     x <- x[, setdiff(1:(p + n_blocks), latent_vars)]
@@ -2029,12 +2037,8 @@ genMuXZSd <- function(n, p, beta, Sigma, blocked_dgp_vars,
     stopifnot(ncol(x) == p)
 
     if(any(!is.na(z))){
-        if(n_blocks > 1){
-            stopifnot(nrow(z) == n)
-            stopifnot(ncol(z) == n_blocks)
-        } else{
-            stopifnot(length(z) == n)
-        }
+        stopifnot(nrow(z) == n)
+        stopifnot(ncol(z) == n_blocks)
     }
 
     stopifnot(is.numeric(sd) | is.integer(sd))
