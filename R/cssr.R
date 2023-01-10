@@ -260,18 +260,20 @@ genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
 
     # Generate covariance matrix (latent features are mixed in matrix, so each
     # cluster will be of size cluster_size + 1)
-    Sigma <- makeCovarianceMatrix(p + n_clusters, n_clusters, cluster_size +
-        1, rho, var)
+    Sigma <- makeCovarianceMatrix(p=p + n_clusters, nblocks=n_clusters,
+        block_size=cluster_size + 1, rho=rho, var=var)
 
     # Generate coefficients
     # Note that beta has length p + sig_clusters
-    coefs <- makeCoefficients(p + n_clusters, k_unclustered, beta_unclustered,
-        beta_latent, n_clusters, sig_clusters, cluster_size + 1)
+    coefs <- makeCoefficients(p=p + n_clusters, k_unblocked=k_unclustered,
+        beta_low=beta_unclustered, beta_high=beta_latent, nblocks=n_clusters,
+        sig_blocks=sig_clusters, block_size=cluster_size + 1)
 
     # Generate mu, X, z, sd, y
-    gen_mu_x_z_sd_res <- genMuXZSd(n, p, coefs$beta, Sigma,
-        coefs$blocked_dgp_vars, coefs$latent_vars, n_clusters,
-        cluster_size, snr, sigma_eps_sq)
+    gen_mu_x_z_sd_res <- genMuXZSd(n=n, p=p, beta=coefs$beta, Sigma=Sigma,
+        blocked_dgp_vars=coefs$blocked_dgp_vars, latent_vars=coefs$latent_vars, 
+        block_size=cluster_size, n_blocks=n_clusters, snr=snr,
+        sigma_eps_sq=sigma_eps_sq)
 
     mu <- gen_mu_x_z_sd_res$mu
     sd <- gen_mu_x_z_sd_res$sd
@@ -371,10 +373,12 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
     stopifnot(!is.na(lambda_choice))
     stopifnot(lambda_choice %in% c("min", "1se"))
 
+    stopifnot(is.matrix(X))
+    stopifnot(is.numeric(X) | is.integer(X))
     n <- nrow(X)
-    stopifnot(n == length(y))
 
     stopifnot(is.numeric(nfolds) | is.integer(nfolds))
+    stopifnot(length(nfolds) == 1)
     stopifnot(nfolds == round(nfolds))
     stopifnot(nfolds > 3)
 
@@ -383,6 +387,7 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
     # can have a more general format as long as a suitable feature selection
     # function is provided by the user)
     stopifnot(is.numeric(y) | is.integer(y))
+    stopifnot(n == length(y))
 
     # Sample size to use: inflate n/2 by a factor of nfolds/(nfolds - 1),
     # so that each individual lasso fit is of size floor(n/2)
@@ -1952,12 +1957,12 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
 #' nonzero coefficient beta_high in the true model for y.
 #' @param latent_vars An integer vector of length n_blocks containing the
 #' indices of all of the latent features.
-#' @param n_blocks Integer or numeric; the number of latent variables to
-#' generate, each of which will be associated with an observed cluster in X.
-#' Must be at least 1. Default is 1.
 #' @param block_size Integer or numeric; for each of the n_blocks latent
 #' variables, X will contain block_size noisy proxies that are correlated with
 #' the latent variable.
+#' @param n_blocks Integer or numeric; the number of latent variables to
+#' generate, each of which will be associated with an observed cluster in X.
+#' Must be at least 1. Default is 1.
 #' @param snr Integer or numeric; the signal-to-noise ratio of the response
 #' y. If sigma_eps_sq is not specified, the variance of the noise in y will be
 #' calculated using the formula sigma_eps_sq = sum(mu^2)/(n * snr). Only one of
@@ -1975,7 +1980,7 @@ makeCoefficients <- function(p, k_unblocked, beta_low, beta_high, nblocks,
 #' sigma_eps_sq).}
 #' @author Gregory Faletto, Jacob Bien
 genMuXZSd <- function(n, p, beta, Sigma, blocked_dgp_vars,
-    latent_vars, n_blocks=1, block_size, snr=NA, sigma_eps_sq=NA){
+    latent_vars, block_size, n_blocks=1, snr=NA, sigma_eps_sq=NA){
     # Check inputs
 
     stopifnot(length(blocked_dgp_vars) <= n_blocks)
@@ -2342,12 +2347,8 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
 
 #' Automated estimation of model size
 #'
-#' This function is used internally by the functions cssSelect and cssPredict
-#' if no selection proportion threshold (cutoff) or maximum number of clusters
-#' (max_num_clusts) is provided as an input by the user and auto_select_size is
-#' TRUE. getModelSize uses the lasso with cross-validation to estimate the
-#' model size, which is then provided as max_num_clusts to cssSelect or
-#' cssPredict. Before using the lasso, in each cluster all features will be
+#' This function is uses the lasso with cross-validation to estimate the
+#' model size. Before using the lasso, in each cluster all features will be
 #' dropped from X except the one feature with the highest marginal correlation
 #' with y, as in the protolasso (Reid and Tibshirani 2016).
 #' 
@@ -2373,17 +2374,6 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
 #' \url{https://doi.org/10.1093/biostatistics/kxv049}.
 #' @export
 getModelSize <- function(X, y, clusters){
-    n <- nrow(X)
-
-    # Since the model size will be determined by cross-validation, the provided
-    # y must be real-valued (this should be checked internally in other
-    # functions before getModelSize is called, but this check is here just in
-    # case).
-    if(!is.numeric(y) & !is.integer(y)){
-        stop("getModelSize is trying to determine max_num_clusts using the lasso with cross-validation, but the y provided to getModelSize was not real-valued.")
-    }
-
-    # Make sure X is a matrix
 
     stopifnot(is.matrix(X) | is.data.frame(X))
 
@@ -2395,6 +2385,31 @@ getModelSize <- function(X, y, clusters){
 
     stopifnot(is.matrix(X))
     stopifnot(all(!is.na(X)))
+    stopifnot(is.numeric(X) | is.integer(X))
+    n <- nrow(X)
+
+    # Since the model size will be determined by cross-validation, the provided
+    # y must be real-valued (this should be checked internally in other
+    # functions before getModelSize is called, but this check is here just in
+    # case).
+    if(!is.numeric(y) & !is.integer(y)){
+        stop("getModelSize is trying to determine max_num_clusts using the lasso with cross-validation, but the y provided to getModelSize was not real-valued.")
+    }
+    stopifnot(length(y) == n)
+
+    # Check clusters argument
+    clusters <- checkCssClustersInput(clusters)
+
+    ### Format clusters into a list where all features are in exactly one
+    # cluster (any unclustered features are put in their own "cluster" of size
+    # 1).
+    clust_names <- as.character(NA)
+    if(!is.null(names(clusters))){
+        clust_names <- names(clusters)
+    }
+
+    clusters <- formatClusters(clusters, p=ncol(X),
+        clust_names=clust_names)$clusters
 
     X_size <- X
 
