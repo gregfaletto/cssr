@@ -1,7 +1,7 @@
-# TODO @gfaletto: implement protolasso and clusterRepLasso (located in 
+# TODO(gregfaletto): implement protolasso and clusterRepLasso (located in 
 # toy_ex_slide_funcs.R, in /Users/gregfaletto/Google Drive/Data Science/LaTeX/Generalized Stability Selection Presentation)
 
-# TODO @gfaletto: make sure behavior of functions makes sense if selection
+# TODO(gregfaletto): make sure behavior of functions makes sense if selection
 # indicator matrix ends up containing all 0s or all 1s (and maybe throw a
 # warning or error in this case)
 
@@ -179,7 +179,7 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 
 ### BELOW IS DONE AND IN RMD FILE
 
-# TODO @gfaletto change cluster_size into a vector of sizes (maybe also
+# TODO(gregfaletto) change cluster_size into a vector of sizes (maybe also
 # deprecate n_clusters as an input, since this would be inferred by the length
 # of cluster_sizes?)
 
@@ -474,7 +474,7 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
 #' @export
 getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
     min_num_clusts=1, max_num_clusts=NA, trainX=NA, trainY=NA){
-    # TODO(gfaletto) Consider adding an argument for a user-provided prediction
+    # TODO(gregfaletto) Consider adding an argument for a user-provided prediction
     # function in order to allow for more general kinds of predictions than
     # OLS.
 
@@ -555,6 +555,8 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
     return(predictions)
 }
 
+### BELOW IS DONE AND IN RMD FILE
+
 #' Obtain a selected set of clusters and features
 #'
 #' Generate sets of selected clusters and features from cluster stability
@@ -614,6 +616,8 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
     sel_results <- getSelectedClusters(css_results, weighting, cutoff,
         min_num_clusts, max_num_clusts)
 
+    # sel_results$selected_clusts is guaranteed to have length at least 1 by
+    # getSelectedClusters
     sel_clust_names <- names(sel_results$selected_clusts)
 
     stopifnot(length(sel_clust_names) >= 1)
@@ -625,13 +629,18 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
         names(sel_clusts)[i] <- sel_clust_names[i]
     }
 
+    stopifnot(is.list(sel_clusts))
+    stopifnot(length(sel_clusts) == length(sel_clust_names))
+
+    # sel_results$selected_feats is guaranteed to have length at least as long
+    # as sel_results$selected_clusts by getSelectedClusters
     return(list(selected_clusts=sel_clusts,
         selected_feats=sel_results$selected_feats))
 }
 
 ### BELOW IS DONE AND IN RMD FILE
 
-#' Print cluster stabilty selection output
+#' Print cluster stability selection output
 #'
 #' Print a summary of the information from the css function.
 #' @param x An object of class "cssr" (the output of the function css).
@@ -674,12 +683,12 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
     max_num_clusts <- checkMaxNumClusts(max_num_clusts, min_num_clusts, p,
         length(css_results$clusters))
 
-    sel_results <- getCssSelections(css_results, cutoff=cutoff,
-        min_num_clusts=min_num_clusts, max_num_clusts=max_num_clusts)
+    sel_clusts <- getCssSelections(css_results, cutoff=cutoff,
+        min_num_clusts=min_num_clusts,
+        max_num_clusts=max_num_clusts)$selected_clusts
 
-    sel_clusts <- sel_results$selected_clusts
-
-    n_sel_clusts <- length(sel_clusts)
+    # sel_clusts is guaranteed to have length at least 1 by
+    # getCssSelections 
 
     # Get prototypes (feature from each cluster with highest selection
     # proportion, breaking ties by using marginal correlations of features with
@@ -1166,7 +1175,7 @@ getSubsamps <- function(n, B, sampling_type){
         subsamples[[i]] <- sort(sample.int(n=n, size=floor(n/2), replace=FALSE))
     }
     stopifnot(length(subsamples) == B)
-    # TODO @gfaletto: add support for sampling_type="MS"
+    # TODO(gregfaletto): add support for sampling_type="MS"
     if(sampling_type=="SS"){
         for(i in 1:B){
             # For the ith entry, take a subsample of size floor(n/2) from the
@@ -1402,7 +1411,7 @@ cssLoop <- function(input, x, y, lambda, fitfun){
 cssLasso <- function(X, y, lambda){
     # Check inputs
 
-    # TODO @gfaletto allow cssLasso to accept a vector of lambda values rather
+    # TODO(gregfaletto) allow cssLasso to accept a vector of lambda values rather
     # than just a single one.
     checkCssLassoInputs(X, y, lambda)
 
@@ -2255,6 +2264,8 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
         }
     }
 
+    stopifnot(length(selected_clusts) >= 1)
+
     clust_names <- names(selected_clusts)
 
     n_sel_clusts <- length(selected_clusts)
@@ -2316,10 +2327,10 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
     # Check inputs
     stopifnot(class(css_results) == "cssr")
 
-    stopifnot(all(lengths(selected_clusts) >= 1))
     stopifnot(is.list(selected_clusts))
-
     n_selected_clusts <- length(selected_clusts)
+    stopifnot(n_selected_clusts >= 1)
+    stopifnot(all(lengths(selected_clusts) >= 1))
 
     prototypes <- rep(as.integer(NA), n_selected_clusts)
     for(i in 1:n_selected_clusts){
