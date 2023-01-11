@@ -634,8 +634,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' Print cluster stabilty selection output
 #'
 #' Print a summary of the information from the css function.
-#' @param x An object of class "cssr" (the output of the function
-#' css).
+#' @param x An object of class "cssr" (the output of the function css).
 #' @param cutoff Numeric; print.cssr will display only those
 #' clusters with selection proportions equal to at least cutoff. Must be between
 #' 0 and 1. Default is 0 (in which case either all clusters are displayed, or
@@ -653,13 +652,13 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
 #' @return A data.frame; each row contains a cluster, arranged in decreasing
 #' order of cluster selection proportion from top to bottom. The columns are
 #' ClustName (the name of the cluster that was either provided to css or made by
-#' css if no name was provided), ClustProtoName (only returned if the features
-#' have names), the name of the prototype from the cluster, which is the feature
-#' with the greatest individual selection proportion among all the cluster
-#' members (if there is a tie, it is broken by choosing the feature with the
-#' highest correlation with the response), ClustProtoNum (the column number of
-#' the prototype in the X matrix provided to css), and ClustSize (the size of
-#' the cluster).
+#' css if no name was provided); ClustProtoName (the name of the selection
+#' prototype from the cluster, which is the feature with the greatest individual
+#' selection proportion among all the cluster members, with ties broken by
+#' choosing the feature with the highest correlation with the response if the
+#' response is real-valued; only returned if the features are named),
+#' ClustProtoNum (the column number of the prototype in the X matrix provided to
+#' css), and ClustSize (the size of the cluster).
 #' @author Gregory Faletto, Jacob Bien
 #' @export
 print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
@@ -684,11 +683,12 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
 
     # Get prototypes (feature from each cluster with highest selection
     # proportion, breaking ties by using marginal correlations of features with
-    # y from data provided to css)
+    # y from data provided to css if y is real-valued)
     prototypes <- getSelectionPrototypes(css_results, sel_clusts)
-
+    
     # Cluster selection proportions
-    sel_clust_sel_props <- colMeans(css_results$clus_sel_mat[, names(sel_clusts)])
+    sel_clust_sel_props <- colMeans(css_results$clus_sel_mat[,
+        names(sel_clusts)])
 
     # Data.frame: name of cluster, cluster prototype, selection proportion,
     # cluster size
@@ -709,6 +709,8 @@ print.cssr <- function(x, cutoff=0, min_num_clusts=1, max_num_clusts=NA, ...){
     print_df <- print_df[order(print_df$ClustSelProp, decreasing=TRUE), ]
 
     rownames(print_df) <- NULL
+
+    # print.data.frame(print_df)
 
     return(print_df)
 }
@@ -2292,10 +2294,12 @@ getSelectedClusters <- function(css_results, weighting, cutoff, min_num_clusts,
         selected_feats=selected_feats, weights=weights))
 }
 
-#' Identify prototypes from selected clusters
+### BELOW IS DONE AND IN RMD FILE
+
+#' Identify selection prototypes from selected clusters
 #'
 #' Takes in list of selected clusters and returns an integer vector of the
-#' indices of the features that are the prototypes of each cluster.
+#' indices of the features that were most frequently selected from each cluster
 #'
 #' @param css_results An object of class "cssr" (the output of the function
 #' css).
@@ -2324,9 +2328,12 @@ getSelectionPrototypes <- function(css_results, selected_clusts){
         proto_i <- clust_i[sel_props_i == max(sel_props_i)]
         stopifnot(length(proto_i) >= 1)
         if(length(proto_i) > 1){
-            # Break tie by looking at marginal correlations
-            corrs_i <- stats::cor(css_results$X[, proto_i], css_results$y)[, 1]
-            proto_i <- proto_i[corrs_i == max(corrs_i)]
+            if(is.numeric(css_results$y) | is.integer(css_results$y)){
+                # Break tie by looking at marginal correlations
+                corrs_i <- stats::cor(css_results$X[, proto_i], css_results$y)[, 1]
+                corrs_i <- abs(corrs_i)
+                proto_i <- proto_i[corrs_i == max(corrs_i)]
+            }
         }
         # If there is still a tie, break by choosing the first feature of those
         # remaining
