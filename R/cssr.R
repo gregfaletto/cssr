@@ -924,8 +924,7 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 #' @author Gregory Faletto, Jacob Bien
 #' @export
 cssSelect <- function(X, y, clusters = list(), lambda=NA, cutoff=NA,
-    max_num_clusts=NA, auto_select_size=TRUE
-    ){
+    max_num_clusts=NA, auto_select_size=TRUE){
 
     # Check inputs (most inputs will be checked by called functions)
 
