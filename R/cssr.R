@@ -148,6 +148,8 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 
     ### Get matrix of selected feature sets from subsamples
 
+    stopifnot(!is.matrix(y))
+
     feat_sel_mat <- getSelMatrix(X[sel_inds, ], y[sel_inds], lambda, B,
         sampling_type, subsamps_object, num_cores, fitfun)
 
@@ -1318,6 +1320,7 @@ getSelMatrix <- function(x, y, lambda, B, sampling_type, subsamps_object,
     p <- ncol(x)
 
     stopifnot(length(y) == n)
+    stopifnot(!is.matrix(y))
     # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
@@ -1419,6 +1422,7 @@ cssLoop <- function(input, x, y, lambda, fitfun){
     p <- ncol(x)
 
     stopifnot(length(y) == n)
+    stopifnot(!is.matrix(y))
     # Intentionally don't check y or lambda further to allow for flexibility--these
     # inputs should be checked within fitfun.
 
@@ -3329,6 +3333,9 @@ checkCssLassoInputs <- function(X, y, lambda){
 
     if(!is.numeric(y)){
         stop("For method cssLasso, y must be a numeric vector.")
+    }
+    if(is.matrix(y)){
+        stop("For method cssLasso, y must be a numeric vector (inputted y was a matrix).")
     }
     if(n != length(y)){
         stop("For method cssLasso, y must be a vector of length equal to nrow(X).")
