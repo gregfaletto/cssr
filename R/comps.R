@@ -126,8 +126,8 @@ getXglmnet <- function(x, clusters, n_clusters, type, prototypes=NA){
 }
 
 # TODO(gregfaletto): figure out how to eliminate need for prototypes argument in
-# getClusterSelsFromGlmnet under clusterRepLasso (shouldn't be necessary for
-# anything)
+# getClusterSelsFromGlmnet when called by clusterRepLasso (shouldn't be
+# necessary for anything)
 getClusterSelsFromGlmnet <- function(lasso_sets, clusters, prototypes,
     n_cluster_members, non_cluster_feats, var_names_provided=FALSE,
     var_names=NA, averaging=FALSE){
@@ -377,7 +377,6 @@ protolasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
         stopifnot(length(var_names) == ncol(x))
     }
 
-
     # Check clusters argument
     clusters <- checkCssClustersInput(clusters)
 
@@ -433,13 +432,19 @@ protolasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
 }
 
 
-
-clusterRepLasso <- function(x, y, R, var_names=NA, nlambda=4000){
-
-    # R
-    # Numeric p x p matrix; entry ij contains the "substitutive value" of 
-    # feature i for feature j (diagonal must consist of ones, all entries must be between 0 and 1, and matrix must
-    # be symmetric)
+#' @param clusters A list of integer vectors; each vector should contain the 
+#' indices of a cluster of features (a subset of 1:p). (If there is only one
+#' cluster, clusters can either be a list of length 1 or an integer vector.)
+#' All of the provided clusters must be non-overlapping. Every feature not
+#' appearing in any cluster will be assumed to be unclustered (that is, they
+#' will be treated as if they are in a "cluster" containing only themselves). If
+#' clusters is a list of length 0 (or a list only containing clusters of length
+#' 1), then css() returns the same results as stability selection (so the
+#' returned feat_sel_mat will be identical to clus_sel_mat). Names for the
+#' clusters will be needed later; any clusters that are not given names in the
+#' provided list will be given names automatically by css. Default is list() (so
+#' no clusters are specified).
+clusterRepLasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
 
     if(is.data.frame(x)){
         x <- model.matrix(~ ., x)
@@ -457,14 +462,6 @@ clusterRepLasso <- function(x, y, R, var_names=NA, nlambda=4000){
 
     stopifnot(is.numeric(y))
 
-    stopifnot(is.matrix(R))
-    stopifnot(all(dim(R) == p))
-    stopifnot(all(diag(R) == 1))
-    stopifnot(identical(R, t(R)))
-    stopifnot(all(!is.na(R)))
-    stopifnot(all(R >= 0))
-    stopifnot(all(R <= 1))
-
     var_names_provided <- FALSE
     # If var_names is provided, convert avg_feats entries to character vectors
     if(all(!is.na(var_names))){
@@ -473,15 +470,20 @@ clusterRepLasso <- function(x, y, R, var_names=NA, nlambda=4000){
         stopifnot(length(var_names) == ncol(x))
     }
 
-    # Identify clustered features: row i in R contains all the features
-    # that are in a cluster with feature i, so come up with a list containing
-    # all the clusters and then remove the repeats
+    # Check clusters argument
+    clusters <- checkCssClustersInput(clusters)
 
-    # TODO: figure out how to eliminate need for prototypes argument in
-    # getClusterSelsFromGlmnet under clusterRepLasso so that I don't have to get
-    # the prototypes here (shouldn't be necessary for anything)
-    cluster_results <- formatClusters(clusters=NA, R=R, get_prototypes=TRUE,
-        x=x, y=y, p=p)
+    ### Format clusters into a list where all features are in exactly one
+    # cluster (any unclustered features are put in their own "cluster" of size
+    # 1).
+    clust_names <- as.character(NA)
+    # if(!is.null(names(clusters))){
+    if(!is.null(names(clusters)) & is.list(clusters)){
+        clust_names <- names(clusters)
+    }
+
+    cluster_results <- formatClusters(clusters, p=p, clust_names=clust_names,
+    	get_prototypes=TRUE, x=x, y=y)
 
     clusters <- cluster_results$clusters
     # multiple <- cluster_results$multiple
