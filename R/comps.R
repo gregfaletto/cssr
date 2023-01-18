@@ -132,55 +132,9 @@ getClusterSelsFromGlmnet <- function(lasso_sets, clusters, prototypes,
     var_names=NA, averaging=FALSE){
 
     # Check inputs
-
-    stopifnot(!is.list(clusters) | all(lengths(clusters) >= 1))
-    stopifnot(is.list(clusters) | length(clusters) >= 1)
-
-    stopifnot(is.integer(prototypes))
-    if(is.list(clusters)){
-        stopifnot(length(prototypes) == length(clusters))
-    } else{
-        stopifnot(length(prototypes) == 1)
-    }
-    stopifnot(all(!is.na(prototypes)))
-    stopifnot(length(prototypes) == length(unique(prototypes)))
-
-    stopifnot(is.numeric(n_cluster_members) | is.integer(n_cluster_members))
-    stopifnot(n_cluster_members == round(n_cluster_members))
-    stopifnot(n_cluster_members >= 0)
-    # stopifnot(n_cluster_members <= p)
-
-    stopifnot(is.numeric(non_cluster_feats) | is.integer(non_cluster_feats))
-    # stopifnot(length(non_cluster_feats) <= p)
-    stopifnot(length(non_cluster_feats) >= 0)
-    if(length(non_cluster_feats) >= 1){
-        stopifnot(length(non_cluster_feats) == length(unique(non_cluster_feats)))
-        stopifnot(all(round(non_cluster_feats) == non_cluster_feats))
-        # stopifnot(all(non_cluster_feats) %in% 1:p)
-    }
-
-    stopifnot(length(var_names_provided) == 1)
-    stopifnot(is.logical(var_names_provided))
-    if(var_names_provided){
-        stopifnot(is.character(var_names))
-        if(any(is.na(var_names))){
-            stop("must provide var_names (with no NAs) if var_names_provided=TRUE")
-        }
-    }
-
-    stopifnot(length(averaging) == 1)
-    stopifnot(is.logical(averaging))
-
-    if(is.list(clusters)){
-        n_clusters <- length(clusters)
-    } else{
-        n_clusters <- 1
-    }
-    
-    stopifnot(length(prototypes) == n_clusters)
-
-
-
+    n_clusters <- checkGetClusterSelsFromGlmnetInput(clusters,
+        prototypes, n_cluster_members, non_cluster_feats, var_names_provided,
+        var_names, averaging)
 
     max_length <- max(vapply(lasso_sets, length, integer(1)))
 
@@ -335,6 +289,60 @@ getClusterSelsFromGlmnet <- function(lasso_sets, clusters, prototypes,
     else{
         return(selected_sets)
     }
+}
+
+checkGetClusterSelsFromGlmnetInput <- function(clusters, prototypes,
+    n_cluster_members, non_cluster_feats, var_names_provided, var_names,
+    averaging){
+
+    stopifnot(!is.list(clusters) | all(lengths(clusters) >= 1))
+    stopifnot(is.list(clusters) | length(clusters) >= 1)
+
+    stopifnot(is.integer(prototypes))
+    if(is.list(clusters)){
+        stopifnot(length(prototypes) == length(clusters))
+    } else{
+        stopifnot(length(prototypes) == 1)
+    }
+    stopifnot(all(!is.na(prototypes)))
+    stopifnot(length(prototypes) == length(unique(prototypes)))
+
+    stopifnot(is.numeric(n_cluster_members) | is.integer(n_cluster_members))
+    stopifnot(n_cluster_members == round(n_cluster_members))
+    stopifnot(n_cluster_members >= 0)
+    # stopifnot(n_cluster_members <= p)
+
+    stopifnot(is.numeric(non_cluster_feats) | is.integer(non_cluster_feats))
+    # stopifnot(length(non_cluster_feats) <= p)
+    stopifnot(length(non_cluster_feats) >= 0)
+    if(length(non_cluster_feats) >= 1){
+        stopifnot(length(non_cluster_feats) == length(unique(non_cluster_feats)))
+        stopifnot(all(round(non_cluster_feats) == non_cluster_feats))
+        # stopifnot(all(non_cluster_feats) %in% 1:p)
+    }
+
+    stopifnot(length(var_names_provided) == 1)
+    stopifnot(is.logical(var_names_provided))
+    if(var_names_provided){
+        stopifnot(is.character(var_names))
+        if(any(is.na(var_names))){
+            stop("must provide var_names (with no NAs) if var_names_provided=TRUE")
+        }
+    }
+
+    stopifnot(length(averaging) == 1)
+    stopifnot(is.logical(averaging))
+
+    if(is.list(clusters)){
+        n_clusters <- length(clusters)
+    } else{
+        n_clusters <- 1
+    }
+    
+    stopifnot(length(prototypes) == n_clusters)
+
+    return(n_clusters)
+
 }
 
 
