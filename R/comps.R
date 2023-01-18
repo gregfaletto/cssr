@@ -34,6 +34,8 @@ getXglmnet <- function(x, clusters, n_clusters, type, prototypes=NA){
                 cluster_members <- c(cluster_members, clusters[[i]])
             }
         }
+        stopifnot(ncol(X_cluster) == n_clusters)
+        
         non_cluster_feats <- setdiff(1:p, cluster_members)
 
         if(length(non_cluster_feats) > 0){
