@@ -5,10 +5,94 @@ getXglmnet <- function(x, clusters, n_clusters, type, prototypes=NA){
     # average of all the cluster members).
 
     # Check inputs
+    checkGetXglmnetInputs(x, clusters, n_clusters, type, prototypes)
 
-    stopifnot(is.matrix(x))
     n <- nrow(x)
     p <- ncol(x)
+
+    if(n_clusters > 0){
+        for(i in 1:n_clusters){
+
+            if(type == "protolasso"){
+                X_cluster_i <- x[, prototypes[i]]
+            } else {
+                stopifnot(type == "clusterRepLasso")
+                if(length(clusters[[i]]) > 1){
+                    X_cluster_i <- rowMeans(x[, clusters[[i]]])
+                } else{
+                    X_cluster_i <- x[, clusters[[i]]]
+                }    
+            }
+
+            stopifnot(length(X_cluster_i) == n)
+            
+            if(i == 1){
+                X_cluster <- as.matrix(X_cluster_i)
+                cluster_members <- clusters[[i]]
+            } else{
+                X_cluster <- cbind(X_cluster, X_cluster_i)
+                cluster_members <- c(cluster_members, clusters[[i]])
+            }
+        }
+        non_cluster_feats <- setdiff(1:p, cluster_members)
+
+        if(length(non_cluster_feats) > 0){
+            X_glmnet <- cbind(X_cluster, x[, non_cluster_feats])
+        } else{
+            X_glmnet <- X_cluster
+        }
+        stopifnot(ncol(X_glmnet) == length(non_cluster_feats) + n_clusters)
+    } else{
+        X_glmnet <- x
+        if(type == "protolasso"){
+            stopifnot(length(prototypes) == 0)
+        }
+        cluster_members <- integer()
+        non_cluster_feats <- 1:p
+    }
+
+    colnames(X_glmnet) <- character()
+
+    # Check output
+    checkGetXglmnetOutput(n, p, X_glmnet, cluster_members, non_cluster_feats)
+    
+    return(list(X_glmnet=X_glmnet, cluster_members=cluster_members,
+        non_cluster_feats=non_cluster_feats))
+
+}
+
+checkGetXglmnetOutput <- function(n, p, X_glmnet, cluster_members,
+    non_cluster_feats){
+    stopifnot(is.matrix(X_glmnet))
+    stopifnot(nrow(X_glmnet) == n)
+    stopifnot(ncol(X_glmnet) <= p)
+    stopifnot(ncol(X_glmnet) >= 1)
+
+    stopifnot(is.numeric(cluster_members) | is.integer(cluster_members))
+    stopifnot(length(cluster_members) <= p)
+    stopifnot(length(cluster_members) >= 0)
+    if(length(cluster_members) >= 1){
+        stopifnot(length(cluster_members) == length(unique(cluster_members)))
+        stopifnot(all(round(cluster_members) == cluster_members))
+        stopifnot(all(cluster_members) %in% 1:p)
+    }
+
+    stopifnot(is.numeric(non_cluster_feats) | is.integer(non_cluster_feats))
+    stopifnot(length(non_cluster_feats) <= p)
+    stopifnot(length(non_cluster_feats) >= 0)
+    if(length(non_cluster_feats) >= 1){
+        stopifnot(length(non_cluster_feats) == length(unique(non_cluster_feats)))
+        stopifnot(all(round(non_cluster_feats) == non_cluster_feats))
+        stopifnot(all(non_cluster_feats) %in% 1:p)
+    }
+    
+    stopifnot(length(intersect(cluster_members, non_cluster_feats)) == 0)
+    stopifnot(length(cluster_members) + length(non_cluster_feats) == p)
+
+}
+
+checkGetXglmnetInputs <- function(x, clusters, n_clusters, type, prototypes){
+    stopifnot(is.matrix(x))
 
     stopifnot(is.list(clusters))
     stopifnot(all(lengths(clusters) >= 1))
@@ -36,93 +120,6 @@ getXglmnet <- function(x, clusters, n_clusters, type, prototypes=NA){
         stopifnot(all(!is.na(prototypes)))
         stopifnot(length(prototypes) == length(unique(prototypes)))
     }
-
-    if(n_clusters > 0){
-        # if(is.list(clusters)){
-        for(i in 1:n_clusters){
-            # X_cluster_i <- rowMeans(x[, clusters[[i]]])
-            if(type == "protolasso"){
-                X_cluster_i <- x[, prototypes[i]]
-            } else if(type=="clusterRepLasso"){
-                if(length(clusters[[i]]) > 1){
-                    X_cluster_i <- rowMeans(x[, clusters[[i]]])
-                } else{
-                    stopifnot(length(clusters[[i]]) == 1)
-                    X_cluster_i <- x[, clusters[[i]]]
-                }
-                
-            } else{
-                stop("!(type %in% c(protolasso, clusterRepLasso))")
-            }
-            
-            if(i == 1){
-                X_cluster <- as.matrix(X_cluster_i)
-                cluster_members <- clusters[[i]]
-            } else{
-                X_cluster <- cbind(X_cluster, X_cluster_i)
-                cluster_members <- c(cluster_members, clusters[[i]])
-            }
-        }
-        non_cluster_feats <- setdiff(1:p, cluster_members)
-        # } else{
-        #     cluster_members <- clusters
-        #     non_cluster_feats <- setdiff(1:p, cluster_members)
-        #     if(type == "protolasso"){
-        #         X_cluster_i <- x[, prototypes]
-        #         stopifnot(all(!(prototypes %in% non_cluster_feats)))
-        #     } else if(type=="clusterRepLasso"){
-        #         X_cluster_i <- rowMeans(x[, clusters])
-        #     } else{
-        #         stop("!(type %in% c(protolasso, clusterRepLasso))")
-        #     }
-        #     X_cluster <- as.matrix(X_cluster_i)
-            
-        # }
-        if(length(non_cluster_feats) > 0){
-            X_glmnet <- cbind(X_cluster, x[, non_cluster_feats])
-        } else{
-            X_glmnet <- X_cluster
-        }
-        stopifnot(ncol(X_glmnet) == length(non_cluster_feats) + n_clusters)
-    } else{
-        X_glmnet <- x
-        if(type == "protolasso"){stopifnot(length(prototypes) == 0)}
-        cluster_members <- integer()
-        non_cluster_feats <- 1:p
-    }
-
-    colnames(X_glmnet) <- character()
-
-    # Check output
-    stopifnot(is.matrix(X_glmnet))
-    stopifnot(nrow(X_glmnet) == n)
-    stopifnot(ncol(X_glmnet) <= p)
-    stopifnot(ncol(X_glmnet) >= 1)
-
-    stopifnot(is.numeric(cluster_members) | is.integer(cluster_members))
-    stopifnot(length(cluster_members) <= p)
-    stopifnot(length(cluster_members) >= 0)
-    if(length(cluster_members) >= 1){
-        stopifnot(length(cluster_members) == length(unique(cluster_members)))
-        stopifnot(all(round(cluster_members) == cluster_members))
-        stopifnot(all(cluster_members) %in% 1:p)
-    }
-
-    stopifnot(is.numeric(non_cluster_feats) | is.integer(non_cluster_feats))
-    stopifnot(length(non_cluster_feats) <= p)
-    stopifnot(length(non_cluster_feats) >= 0)
-    if(length(non_cluster_feats) >= 1){
-        stopifnot(length(non_cluster_feats) == length(unique(non_cluster_feats)))
-        stopifnot(all(round(non_cluster_feats) == non_cluster_feats))
-        stopifnot(all(non_cluster_feats) %in% 1:p)
-    }
-    
-    stopifnot(length(intersect(cluster_members, non_cluster_feats)) == 0)
-    stopifnot(length(cluster_members) + length(non_cluster_feats) == p)
-
-    return(list(X_glmnet=X_glmnet, cluster_members=cluster_members,
-        non_cluster_feats=non_cluster_feats))
-
 }
 
 # TODO(gregfaletto): figure out how to eliminate need for prototypes argument in
@@ -354,7 +351,8 @@ getClusterSelsFromGlmnet <- function(lasso_sets, clusters, prototypes,
 protolasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
 
     if(is.data.frame(x)){
-        x <- model.matrix(~ ., x)
+        x <- stats::model.matrix(~ ., x)
+        x <- x[, colnames(x) != "(Intercept)"]
     }
 
     stopifnot(is.matrix(x))
@@ -447,7 +445,8 @@ protolasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
 clusterRepLasso <- function(x, y, clusters, var_names=NA, nlambda=4000){
 
     if(is.data.frame(x)){
-        x <- model.matrix(~ ., x)
+        x <- stats::model.matrix(~ ., x)
+        x <- x[, colnames(x) != "(Intercept)"]
     }
 
     colnames(x) <- character()
