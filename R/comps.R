@@ -616,24 +616,22 @@ processClusterLassoInputs <- function(X, y, clusters, nlambda){
         clust_names <- names(clusters)
     }
 
-    cluster_results <- formatClusters(clusters, p=ncol(x),
-        clust_names=clust_names, get_prototypes=TRUE, x=x, y=y)
+    cluster_results <- formatClusters(clusters, p=ncol(X),
+        clust_names=clust_names, get_prototypes=TRUE, x=X, y=y)
 
     clusters <- cluster_results$clusters
-    # multiple <- cluster_results$multiple
     prototypes <- cluster_results$prototypes
 
     rm(cluster_results)
 
-    n_clusters <- sum(lengths(clusters) > 1)
-    stopifnot(n_clusters == length(prototypes))
+    stopifnot(length(clusters) == length(prototypes))
 
     stopifnot(is.numeric(nlambda) | is.integer(nlambda))
     stopifnot(length(nlambda) == 1)
     stopifnot(!is.na(nlambda))
     stopifnot(nlambda >= 2)
 
-    return(list(x=x, clusters=clusters, prototypes=prototypes,
+    return(list(x=X, clusters=clusters, prototypes=prototypes,
         var_names=feat_names))
 }
 
