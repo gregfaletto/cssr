@@ -38,26 +38,23 @@ getXglmnet <- function(x, clusters, type, prototypes=NA){
     # if(n_clusters > 0){
     for(i in 1:length(clusters)){
         cluster_i <- clusters[[i]]
-        
-        if(type == "protolasso"){
-            if(length(cluster_i) > 1){
+
+        if(length(cluster_i) == 1){
+            X_glmnet_i <- x[, cluster_i]
+        } else{
+            stopifnot(length(cluster_i) > 1)
+
+            if(type == "protolasso"){
                 prototype_ind_i <- which(prototypes %in% cluster_i)
                 stopifnot(length(prototype_ind_i) == 1)
                 prototype_i <- prototypes[prototype_ind_i]
-            } else{
-                prototype_i <- cluster_i
-            }
-            
-            X_glmnet_i <- x[, prototype_i]
-        } else {
-            stopifnot(type == "clusterRepLasso")
-            if(length(cluster_i) > 1){
+                X_glmnet_i <- x[, prototype_i]
+            } else {
+                stopifnot(type == "clusterRepLasso")
                 X_glmnet_i <- rowMeans(x[, cluster_i])
-            } else{
-                X_glmnet_i <- x[, cluster_i]
-            }    
+            }
         }
-
+        
         stopifnot(length(X_glmnet_i) == n)
         
         if(i == 1){
@@ -263,10 +260,10 @@ getClusterSelsFromGlmnet <- function(lasso_sets, clusters, prototypes,
 #' containing the indices of the features in X that are in the cluster
 #' containing prototype selected_set[k].}
 #' @author Gregory Faletto, Jacob Bien
-getSelectedSets <- function(lasso_set, model_size, clusters, prototypes,
-    feat_names){
+getSelectedSets <- function(lasso_set, clusters, prototypes, feat_names){
     
     model_size <- length(lasso_set)
+    stopifnot(model_size > 0)
 
     stopifnot(length(unique(lasso_set)) == model_size)
     stopifnot(all(lasso_set <= length(clusters)))
@@ -630,6 +627,7 @@ processClusterLassoInputs <- function(X, y, clusters, nlambda){
     stopifnot(length(nlambda) == 1)
     stopifnot(!is.na(nlambda))
     stopifnot(nlambda >= 2)
+    stopifnot(nlambda == round(nlambda))
 
     return(list(x=X, clusters=clusters, prototypes=prototypes,
         var_names=feat_names))
