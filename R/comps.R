@@ -131,23 +131,20 @@ checkGetXglmnetInputs <- function(x, clusters, type, prototypes){
     stopifnot(!is.na(type))
     stopifnot(type %in% c("protolasso", "clusterRepLasso"))
 
-    if(type=="protolasso"){
-        stopifnot(!is.na(prototypes))
-        stopifnot(is.integer(prototypes))
-        # if(is.list(clusters)){
-            # stopifnot(length(prototypes) == length(clusters))
-        # } else{
-        #     stopifnot(length(prototypes) == 1)
-        # }
-        stopifnot(all(!is.na(prototypes)))
-        stopifnot(length(prototypes) == length(unique(prototypes)))
-        stopifnot(all(prototypes %in% 1:ncol(x)))
-    }
+    stopifnot(!is.na(prototypes))
+    stopifnot(is.integer(prototypes))
+    # if(is.list(clusters)){
+        # stopifnot(length(prototypes) == length(clusters))
+    # } else{
+    #     stopifnot(length(prototypes) == 1)
+    # }
+    stopifnot(all(!is.na(prototypes)))
+    stopifnot(length(prototypes) == length(unique(prototypes)))
+    stopifnot(all(prototypes %in% 1:ncol(x)))
+    
     for(i in 1:length(clusters)){
         cluster_i <- clusters[[i]]
-        if(length(cluster_i) > 1){
-            stopifnot(sum(prototypes %in% cluster_i) == 1)
-        }
+        stopifnot(sum(prototypes %in% cluster_i) == 1)
     }
 }
 
@@ -687,7 +684,8 @@ clusterRepLasso <- function(X, y, clusters=list(), nlambda=100){
 
     # Format the design matrix for glmnet according to the cluster
     # representative lasso procedure
-    X_glmnet <- getXglmnet(x, clusters, type="clusterRepLasso")
+    X_glmnet <- getXglmnet(x, clusters, type="clusterRepLasso",
+        prototypes=prototypes)
 
     #  <- getXglmnet_results$X_glmnet
     # cluster_members <- getXglmnet_results$cluster_members
