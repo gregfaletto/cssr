@@ -837,7 +837,7 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 
     n_train <- nrow(newX)
 
-    results <- checkXInputResults(newX, css_results$X)
+    results <- checkXInputResults(newX, css_results$X, css_results$clusters)
 
     newX <- results$newx
     feat_names <- results$feat_names
@@ -937,10 +937,17 @@ cssSelect <- function(X, y, clusters = list(), lambda=NA, cutoff=NA,
     stopifnot(is.matrix(X) | is.data.frame(X))
     stopifnot(all(!is.na(X)))
 
+
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X)){
+        p <- ncol(X)
         X <- stats::model.matrix(~ ., X)
         X <- X[, colnames(X) != "(Intercept)"]
+
+        if(length(clusters) > 0 & (p != ncol(X))){
+            stop("When stats::model.matrix converted the provided data.frame X to a matrix, the number of columns changed (probably because the provided data.frame contained a factor variable with at least three levels). Please convert the data.frame X to a matrix yourself using model.matrix and provide cluster assignments according to the columns of the new matrix.")
+        }
+
     }
 
     stopifnot(is.matrix(X))
@@ -1061,9 +1068,14 @@ cssPredict <- function(X_train_selec, y_train_selec, X_test, clusters=list(),
 
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X_train_selec)){
+        p <- ncol(X_train_selec)
         X_train_selec <- stats::model.matrix(~ ., X_train_selec)
         X_train_selec <- X_train_selec[, colnames(X_train_selec) !=
             "(Intercept)"]
+
+        if(length(clusters) > 0 & (p != ncol(X_train_selec))){
+            stop("When stats::model.matrix converted the provided data.frame X_train_selec to a matrix, the number of columns changed (probably because the provided data.frame contained a factor variable with at least three levels). Please convert X_train_selec to a matrix yourself using model.matrix and provide cluster assignments according to the columns of the new matrix.")
+        }
     }
 
     stopifnot(is.matrix(X_train_selec))
@@ -2465,8 +2477,14 @@ getModelSize <- function(X, y, clusters){
 
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X)){
+        p <- ncol(X)
+
         X <- stats::model.matrix(~ ., X)
         X <- X[, colnames(X) != "(Intercept)"]
+
+        if(length(clusters) > 0 & (p != ncol(X))){
+            stop("When stats::model.matrix converted the provided data.frame X to a matrix, the number of columns changed (probably because the provided data.frame contained a factor variable with at least three levels). Please convert X to a matrix yourself using model.matrix and provide cluster assignments according to the columns of the new matrix.")
+        }
     }
 
     stopifnot(is.matrix(X))
@@ -2731,18 +2749,27 @@ corFunction <- function(t, y){
 #' @param css_X The X matrix provided to css, as in the output of the css
 #' function (after having been coerced from a data.frame to a matrix by css if
 #' needed).
+#' @param clusters A named list of integer vectors containing all of the
+#' clusters provided to css, as well as size 1 clusters of any features not
+#' listed in any of the clusters provided to css (as in the output of css).
 #' @return A named list with the following elements. \item{feat_names}{A 
 #' character vector containing the column names of newx (if the provided newx
 #' had column names). If the provided newx did not have column names, feat_names
 #' will be NA.} \item{newx}{The provided newx matrix, coerced from a data.frame
 #' to a matrix if the provided newx was a data.frame.}
 #' @author Gregory Faletto, Jacob Bien
-checkXInputResults <- function(newx, css_X){
+checkXInputResults <- function(newx, css_X, clusters){
 
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(newx)){
+        p <- ncol(newx)
+
         newx <- stats::model.matrix(~ ., newx)
         newx <- newx[, colnames(newx) != "(Intercept)"]
+
+        if(length(clusters) != p & (p != ncol(newx))){
+            stop("When stats::model.matrix converted the provided data.frame X to a matrix, the number of columns changed (probably because the provided data.frame contained a factor variable with at least three levels). Please convert X to a matrix yourself using model.matrix and provide cluster assignments according to the columns of the new matrix.")
+        }
     }
 
     feat_names <- as.character(NA)
@@ -2881,8 +2908,14 @@ checkCssInputs <- function(X, y, lambda, clusters, fitfun, sampling_type, B,
 
     # Check if x is a matrix; if it's a data.frame, convert to matrix.
     if(is.data.frame(X)){
+        p <- ncol(X)
+
         X <- stats::model.matrix(~ ., X)
         X <- X[, colnames(X) != "(Intercept)"]
+
+        if(length(clusters) > 0 & (p != ncol(X))){
+            stop("When stats::model.matrix converted the provided data.frame X to a matrix, the number of columns changed (probably because the provided data.frame contained a factor variable with at least three levels). Please convert X to a matrix yourself using model.matrix and provide cluster assignments according to the columns of the new matrix.")
+        }
     }
 
     stopifnot(is.matrix(X))
@@ -3056,7 +3089,7 @@ checkGetCssPredsInputs <- function(css_results, testX, weighting, cutoff,
         }
     }
 
-    results <- checkXInputResults(testX, css_results$X)
+    results <- checkXInputResults(testX, css_results$X, css_results$clusters)
 
     testX <- results$newx
     feat_names <- results$feat_names
@@ -3432,7 +3465,8 @@ checkNewXProvided <- function(trainX, css_results){
 
     if(all(!is.na(trainX)) & length(trainX) > 1){
         newXProvided <- TRUE
-        trainX <- checkXInputResults(trainX, css_results$X)$newx
+        trainX <- checkXInputResults(trainX, css_results$X,
+            css_results$clusters)$newx
         
         n_train <- nrow(trainX)
         stopifnot(n_train > 1)
@@ -3713,7 +3747,8 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
             newx <- css_results$X[css_results$train_inds, ]
             # feat_names <- colnames(newx)
         } else{
-            results <- checkXInputResults(newx, css_results$X)
+            results <- checkXInputResults(newx, css_results$X,
+                css_results$clusters)
 
             newx <- results$newx
             # feat_names <- results$feat_names
@@ -3721,7 +3756,7 @@ checkFormCssDesignInputs <- function(css_results, weighting, cutoff,
             rm(results)
         }
     } else{
-        results <- checkXInputResults(newx, css_results$X)
+        results <- checkXInputResults(newx, css_results$X, css_results$clusters)
 
         newx <- results$newx
         # feat_names <- results$feat_names
