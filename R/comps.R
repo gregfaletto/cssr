@@ -502,7 +502,7 @@ getSelectedSets <- function(lasso_set, clusters, prototypes, feat_names){
 #' testing using cluster prototypes. \emph{Biostatistics}, 17(2), 364–376.
 #' \url{https://doi.org/10.1093/biostatistics/kxv049}.
 #' @export
-protolasso <- function(X, y, clusters, nlambda=100){
+protolasso <- function(X, y, clusters=list(), nlambda=100){
 
     # Handle and format inputs; get cluster prototypes
     ret <- processClusterLassoInputs(X, y, clusters, nlambda)
