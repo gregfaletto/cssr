@@ -203,10 +203,10 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 #' will have nonzero coefficients in the true model for y among those features 
 #' not generated from the n_clusters latent variables (called "weak signal" 
 #' features in the simulations from Faletto and Bien 2022). The coefficients on
-#' these features will be determined by beta_unclustered.
+#' these features will be determined by beta_unclustered. Must be at least 1.
 #' @param cluster_size Integer or numeric; for each of the n_clusters latent
 #' variables, X will contain cluster_size noisy proxies that are correlated with
-#' the latent variable.
+#' the latent variable. Must be at least 2.
 #' @param n_clusters Integer or numeric; the number of latent variables to
 #' generate, each of which will be associated with an observed cluster in X.
 #' Must be at least 1. Default is 1.
@@ -214,12 +214,8 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 #' features that will have nonzero coefficients in the true model for y (all of
 #' them will have coefficient beta_latent). Must be less than or equal to
 #' n_clusters. Default is 1.
-#' @param rho Integer or numeric; the covariance of the proxies in each cluster
-#' with the latent variable (and each other). Note that the correlation between
-#' the features in the cluster will be rho/var. Can't equal 0. Default is 0.9.
-#' @param var Integer or numeric; the variance of all of the observed features
-#' in X (both the proxies for the latent variables and the k_unclustered other
-#' features). Can't equal 0. Default is 1.
+#' @param rho Integer or numeric; the correlation of the proxies in each cluster
+#' with the latent variable. Must be greater than 0. Default is 0.9.
 #' @param beta_latent Integer or numeric; the coefficient used for all
 #' sig_clusters latent variables that have nonzero coefficients in the true
 #' model for y. Can't equal 0. Default is 1.5.
@@ -251,44 +247,96 @@ css <- function(X, y, lambda, clusters = list(), fitfun = cssLasso,
 #' \emph{arXiv preprint arXiv:2201.00494}.
 #' \url{https://arxiv.org/abs/2201.00494}.
 #' @export
-genLatentData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
-    sig_clusters=1, rho=0.9, var=1, beta_latent=1.5, beta_unclustered=1,
+genClusteredData <- function(n, p, k_unclustered, cluster_size, n_clusters=1,
+    sig_clusters=1, rho=0.9, beta_latent=1.5, beta_unclustered=1,
     snr=as.numeric(NA), sigma_eps_sq=as.numeric(NA)){
 
     # Check inputs
-    checkGenLatentDataInputs(p, k_unclustered, cluster_size, n_clusters,
-        sig_clusters, rho, var, beta_latent, beta_unclustered, snr,
+    checkgenClusteredDataInputs(p, k_unclustered, cluster_size, n_clusters,
+        sig_clusters, rho, beta_latent, beta_unclustered, snr,
         sigma_eps_sq)
 
-    # Generate covariance matrix (latent features are mixed in matrix, so each
-    # cluster will be of size cluster_size + 1)
-    Sigma <- makeCovarianceMatrix(p=p + n_clusters, nblocks=n_clusters,
-        block_size=cluster_size + 1, rho=rho, var=var)
+    ret <- genZmuY(n=n, p=p, k_unclustered=k_unclustered,
+        cluster_size=cluster_size, n_clusters=n_clusters,
+        sig_clusters=sig_clusters, beta_latent=beta_latent,
+        beta_unclustered=beta_unclustered, snr=snr, sigma_eps_sq=sigma_eps_sq)
 
-    # Generate coefficients
-    # Note that beta has length p + sig_clusters
-    coefs <- makeCoefficients(p=p + n_clusters, k_unblocked=k_unclustered,
-        beta_low=beta_unclustered, beta_high=beta_latent, nblocks=n_clusters,
-        sig_blocks=sig_clusters, block_size=cluster_size + 1)
+    Z <- ret$Z
+    y <- ret$y
+    mu <- ret$mu
+    other_X <- ret$other_X
 
-    # Generate mu, X, z, sd, y
-    gen_mu_x_z_sd_res <- genMuXZSd(n=n, p=p, beta=coefs$beta, Sigma=Sigma,
-        blocked_dgp_vars=coefs$blocked_dgp_vars, latent_vars=coefs$latent_vars, 
-        block_size=cluster_size, n_blocks=n_clusters, snr=snr,
-        sigma_eps_sq=sigma_eps_sq)
+    # Finally, generate clusters of proxies to complete X. First, get needed
+    # variances of noise to add
+    noise_var <- getNoiseVar(rho)
 
-    mu <- gen_mu_x_z_sd_res$mu
-    sd <- gen_mu_x_z_sd_res$sd
+    # Generate these noise features
+    noise_mat <- matrix(stats::rnorm(n*n_clusters*cluster_size, mean=0,
+        sd=sqrt(noise_var)), n, n_clusters*cluster_size)
 
-    y <- mu + sd * stats::rnorm(n)
+    # Create matrix of proxies
+    proxy_mat <- matrix(as.numeric(NA), n, n_clusters*cluster_size)
+    if(n_clusters > 1){
+        for(i in 1:n_clusters){
+            first_ind <- (i - 1)*cluster_size + 1
+            last_ind <- i*cluster_size
+            proxy_mat[, first_ind:last_ind] <- Z[, i] +
+                noise_mat[, first_ind:last_ind]
+        }
+    } else{
+        stopifnot(ncol(noise_mat) == cluster_size)
+        proxy_mat[, 1:cluster_size] <- Z + noise_mat
+    }
 
-    return(list(X=gen_mu_x_z_sd_res$X, y=y, Z=gen_mu_x_z_sd_res$z, mu=mu))
+    X <- cbind(proxy_mat, other_X)
+    Z <- as.matrix(Z)
+
+    # Check output
+    stopifnot(length(mu) == n)
+
+    stopifnot(nrow(X) == n)
+    stopifnot(ncol(X) == p)
+
+    if(any(!is.na(Z))){
+        stopifnot(nrow(Z) == n)
+        stopifnot(ncol(Z) == n_clusters)
+    }
+
+    return(list(X=X, y=y, Z=Z, mu=mu))
+}
+
+#' Get variance of noise to add to Z in order to yield proxies X with desired
+#' correlations
+#'
+#' @param cor A numeric vector of desired correlations for each proxy to have
+#' with Z. Note: correlations must be positive.
+#' @return A vector of variances of independent Gaussian random variables to add
+#' to Z in order to yield proxies with the desired correlations with Z.
+#' @author Gregory Faletto, Jacob Bien
+getNoiseVar <- function(cor){
+    # Correlation between standard normal Z and X = Z + epsilon where epsilon
+    # is normal, independent of Z, and has mean 0 and variance sig_eps_sq:
+    # 
+    #   E[Z X]/sqrt{Var(Z) Var(X)}
+    # = (E[Z^2] + E[Z*epsilon])/sqrt{1*(1 + sig_eps_sq)}
+    # = (1 + 0)/sqrt{1 + sig_eps_sq}
+    #
+    # So we have
+    #                 cor = 1/sqrt{1 + sig_eps_sq}
+    # \iff 1 + sig_eps_sq = 1/cor^2
+    # \iff     sig_eps_sq = 1/cor^2 - 1
+    stopifnot(is.numeric(cor) | is.integer(cor))
+    stopifnot(all(!is.na(cor)))
+    stopifnot(length(cor) >= 1)
+    stopifnot(all(cor > 0))
+    stopifnot(all(cor <= 1))
+    return(1/cor^2 - 1)
 }
 
 ### BELOW IS DONE AND IN RMD FILE
 
-checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
-    n_clusters, sig_clusters, rho, var, beta_latent, beta_unclustered, snr,
+checkgenClusteredDataInputs <- function(p, k_unclustered, cluster_size,
+    n_clusters, sig_clusters, rho, beta_latent, beta_unclustered, snr,
     sigma_eps_sq){
 
     stopifnot(is.numeric(sig_clusters) | is.integer(sig_clusters))
@@ -305,17 +353,15 @@ checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
     # rather than 2.
     stopifnot(n_clusters >= 1)
 
-    stopifnot(cluster_size >= 1)
+    stopifnot(cluster_size >= 2)
 
-    stopifnot(abs(rho) <= abs(var))
-    stopifnot(rho != 0)
-    stopifnot(var > 0)
+    stopifnot(rho >= 0)
 
     stopifnot(beta_latent != 0)
     stopifnot(beta_unclustered != 0)
 
     stopifnot(is.numeric(k_unclustered) | is.integer(k_unclustered))
-    stopifnot(k_unclustered >= 0)
+    stopifnot(k_unclustered >= 1)
     stopifnot(k_unclustered == round(k_unclustered))
 
     stopifnot(p >= n_clusters*cluster_size + k_unclustered)
@@ -327,11 +373,15 @@ checkGenLatentDataInputs <- function(p, k_unclustered, cluster_size,
         stop("Must specify one of snr or sigma_eps_sq")
     }
 
-    if(!is.na(snr)){
+    if(is.na(snr)){
+        stopifnot(all(!is.na(sigma_eps_sq)))
+        stopifnot(is.numeric(sigma_eps_sq) | is.integer(sigma_eps_sq))
+        stopifnot(length(sigma_eps_sq) == 1)
+        stopifnot(sigma_eps_sq >= 0)
+    } else{
+        stopifnot(is.numeric(snr) | is.integer(snr))
+        stopifnot(length(snr) == 1)
         stopifnot(snr > 0)
-    }
-    if(!is.na(sigma_eps_sq)){
-        stopifnot(sigma_eps_sq > 0)
     }
 }
 
@@ -3940,39 +3990,110 @@ checkCssClustersInput <- function(clusters){
 #' @export
 genClusteredDataWeighted <- function(n, p, k_unclustered, cluster_size,
     n_strong_cluster_vars, n_clusters=1, sig_clusters=1, rho_high=0.9,
-    rho_low=0.5, var=1, beta_latent=1.5, beta_unclustered=1,
+    rho_low=0.5, beta_latent=1.5, beta_unclustered=1,
     snr=as.numeric(NA), sigma_eps_sq=as.numeric(NA)){
 
     # Check inputs
     checkGenClusteredDataWeightedInputs(p, k_unclustered, cluster_size,
         n_strong_cluster_vars, n_clusters,  sig_clusters, rho_high, rho_low,
-        var, beta_latent, beta_unclustered, snr, sigma_eps_sq)
+        beta_latent, beta_unclustered, snr, sigma_eps_sq)
 
-    # Generate covariance matrix (latent features are mixed in matrix, so each
-    # cluster will be of size cluster_size + 1)
-    Sigma <- makeCovarianceMatrixWeighted(p=p + n_clusters, nblocks=n_clusters,
-        block_size=cluster_size + 1,
-        n_strong_block_vars=n_strong_cluster_vars + 1, rho_high=rho_high,
-        rho_low=rho_low, var=var)
+    ret <- genZmuY(n=n, p=p, k_unclustered=k_unclustered,
+        cluster_size=cluster_size, n_clusters=n_clusters,
+        sig_clusters=sig_clusters, beta_latent=beta_latent,
+        beta_unclustered=beta_unclustered, snr=snr, sigma_eps_sq=sigma_eps_sq)
 
-    # Generate coefficients
-    # Note that beta has length p + sig_clusters
-    coefs <- makeCoefficients(p=p + n_clusters, k_unblocked=k_unclustered,
-        beta_low=beta_unclustered, beta_high=beta_latent, nblocks=n_clusters,
-        sig_blocks=sig_clusters, block_size=cluster_size + 1)
+    Z <- ret$Z
+    y <- ret$y
+    mu <- ret$mu
+    other_X <- ret$other_X
 
-    # Generate mu, X, z, sd, y
-    gen_mu_x_z_sd_res <- genMuXZSd(n=n, p=p, beta=coefs$beta, Sigma=Sigma,
-        blocked_dgp_vars=coefs$blocked_dgp_vars, latent_vars=coefs$latent_vars, 
-        block_size=cluster_size, n_blocks=n_clusters, snr=snr,
-        sigma_eps_sq=sigma_eps_sq)
+    # Finally, generate clusters of proxies to complete X.
+    noise_var_high <- getNoiseVar(rho_high)
+    p_high <- n_clusters*n_strong_cluster_vars
+    noise_mat_vars_high <- stats::rnorm(n*p_high, mean=0,
+        sd=sqrt(noise_var_high))
+    noise_mat_high <- matrix(noise_mat_vars_high, n, p_high)
 
-    mu <- gen_mu_x_z_sd_res$mu
-    sd <- gen_mu_x_z_sd_res$sd
+    noise_var_low <- getNoiseVar(rho_low)
+    p_low <- n_clusters*(cluster_size - n_strong_cluster_vars)
+    stopifnot(p_low >= 1)
+    noise_mat_vars_low <- stats::rnorm(n*p_low, mean=0,
+        sd=sqrt(noise_var_low))
+    noise_mat_low <- matrix(noise_mat_vars_low, n, p_low)
 
-    y <- mu + sd * stats::rnorm(n)
+    noise_mat <- cbind(noise_mat_high, noise_mat_low)
+    stopifnot(ncol(noise_mat) == n_clusters*cluster_size)
 
-    return(list(X=gen_mu_x_z_sd_res$X, y=y, Z=gen_mu_x_z_sd_res$z, mu=mu))
+    # Create matrix of proxies
+    proxy_mat <- matrix(as.numeric(NA), n, n_clusters*cluster_size)
+    if(n_clusters > 1){
+        for(i in 1:n_clusters){
+            first_ind <- (i - 1)*cluster_size + 1
+            last_ind <- i*cluster_size
+            proxy_mat[, first_ind:last_ind] <- Z[, i] +
+                noise_mat[, first_ind:last_ind]
+        }
+    } else{
+        stopifnot(ncol(noise_mat) == cluster_size)
+        proxy_mat[, 1:cluster_size] <- Z + noise_mat
+    }
+
+    X <- cbind(proxy_mat, other_X)
+    Z <- as.matrix(Z)
+
+    # Check output
+    stopifnot(length(mu) == n)
+
+    stopifnot(nrow(X) == n)
+    stopifnot(ncol(X) == p)
+
+    if(any(!is.na(Z))){
+        stopifnot(nrow(Z) == n)
+        stopifnot(ncol(Z) == n_clusters)
+    }
+
+    return(list(X=X, y=y, Z=Z, mu=mu))
+}
+
+genZmuY <- function(n, p, k_unclustered, cluster_size, n_clusters, sig_clusters,
+    beta_latent, beta_unclustered, snr, sigma_eps_sq){
+    # Generate Z, weak signal features, and noise features (total of
+    # p - n_clusters*(cluster_size - 1)) features)
+    p_orig_feat_mat <- p - n_clusters*(cluster_size - 1)
+    stopifnot(p_orig_feat_mat >= k_unclustered + n_clusters)
+    orig_feat_mat <- matrix(stats::rnorm(n*p_orig_feat_mat), n, p_orig_feat_mat)
+    # First n_clusters features are Z. Next k_unclustered features are weak
+    # signal features. Any remaining features are noise features.
+    Z <- orig_feat_mat[, 1:n_clusters]
+
+    other_X <- orig_feat_mat[, (n_clusters + 1):p_orig_feat_mat]
+
+    # Ready to create mu and y
+    if(sig_clusters > 1){
+        mu <- Z[, 1:sig_clusters]*beta_latent +
+            other_X[, 1:k_unclustered] %*% rep(beta_unclustered, k_unclustered)
+    } else{
+        mu <- Z*beta_latent + other_X[, 1:k_unclustered] %*%
+            rep(beta_unclustered, k_unclustered)
+    }
+    mu <- as.numeric(mu)
+
+    # If SNR is null, use sigma_eps_sq
+    if(!is.na(sigma_eps_sq)){
+        sd <- sqrt(sigma_eps_sq)
+    }else{
+        sd <- sqrt(sum(mu^2) / (n * snr)) # taking snr = ||mu||^2 /(n * sigma^2)
+    }
+
+    stopifnot(is.numeric(sd) | is.integer(sd))
+    stopifnot(length(sd) == 1)
+    stopifnot(!is.na(sd))
+    stopifnot(sd >= 0)
+
+    y <- as.numeric(mu + rnorm(n, mean=0, sd=sd))
+
+    return(list(Z=Z, mu=mu, y=y, other_X=other_X))
 }
 
 #' Check inputs to genClusteredDataWeighted
@@ -4042,8 +4163,8 @@ genClusteredDataWeighted <- function(n, p, k_unclustered, cluster_size,
 #' the true coefficient vector (equal to y minus the added noise).}
 #' @author Gregory Faletto, Jacob Bien
 checkGenClusteredDataWeightedInputs <- function(p, k_unclustered, cluster_size,
-        n_strong_cluster_vars, n_clusters,  sig_clusters, rho_high, rho_low,
-        var, beta_latent, beta_unclustered, snr, sigma_eps_sq){
+        n_strong_cluster_vars, n_clusters, sig_clusters, rho_high, rho_low,
+        beta_latent, beta_unclustered, snr, sigma_eps_sq){
 
     stopifnot(is.numeric(sig_clusters) | is.integer(sig_clusters))
     stopifnot(sig_clusters <= n_clusters)
@@ -4059,21 +4180,20 @@ checkGenClusteredDataWeightedInputs <- function(p, k_unclustered, cluster_size,
     # rather than 2.
     stopifnot(n_clusters >= 1)
 
-    stopifnot(cluster_size >= 1)
+    stopifnot(cluster_size >= 2)
 
     stopifnot(is.integer(n_strong_cluster_vars) |
         is.numeric(n_strong_cluster_vars))
     stopifnot(!is.na(n_strong_cluster_vars))
     stopifnot(length(n_strong_cluster_vars) == 1)
     stopifnot(n_strong_cluster_vars == round(n_strong_cluster_vars))
-    stopifnot(n_strong_cluster_vars >= 0)
-    stopifnot(n_strong_cluster_vars <= cluster_size)
+    stopifnot(n_strong_cluster_vars >= 1)
+    stopifnot(n_strong_cluster_vars < cluster_size)
 
-    stopifnot(abs(rho_high) <= abs(var))
-    stopifnot(rho_high != 0)
-    stopifnot(rho_low != 0)
-    stopifnot(abs(rho_high) >= abs(rho_low))
-    stopifnot(var > 0)
+    stopifnot(rho_high <= 1)
+    stopifnot(rho_high > 0)
+    stopifnot(rho_low > 0)
+    stopifnot(rho_high >= rho_low)
 
     stopifnot(beta_latent != 0)
     stopifnot(beta_unclustered != 0)
