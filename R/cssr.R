@@ -4297,18 +4297,16 @@ genZmuY <- function(n, p, k_unclustered, cluster_size, n_clusters, sig_clusters,
     # Ready to create mu and y
     if(n_clusters > 1){
         if(sig_clusters > 1){
-            mu <- Z[, 1:sig_clusters] %*% rep(beta_latent, sig_clusters) +
-                other_X[, 1:k_unclustered] %*% rep(beta_unclustered,
-                    k_unclustered)
+            mu <- Z[, 1:sig_clusters] %*% rep(beta_latent, sig_clusters)
+            
         } else{
-            mu <- Z[, 1:sig_clusters] * beta_latent +
-                other_X[, 1:k_unclustered] %*% rep(beta_unclustered,
-                    k_unclustered)
+            mu <- Z[, 1:sig_clusters] * beta_latent
         }
-        
     } else{
-        mu <- Z*beta_latent + other_X[, 1:k_unclustered] %*%
-            rep(beta_unclustered, k_unclustered)
+        mu <- Z*beta_latent
+    }
+    for(j in 1:k_unclustered){
+        mu <- mu + beta_unclustered/sqrt(j)*other_X[, j]
     }
     mu <- as.numeric(mu)
 
