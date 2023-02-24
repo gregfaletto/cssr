@@ -724,11 +724,13 @@ getCssPreds <- function(css_results, testX, weighting="weighted_avg", cutoff=0,
 #' integer vectors; each vector contains the indices of the features in one of
 #' the selected clusters.} \item{selected_feats}{A named integer vector; the
 #' indices of the features with nonzero weights from all of the selected
-#' clusters.}
+#' clusters.} \item{weights}{A named list of the same length as selected_clusts.
+#' Each list element weights[[j]] is a numeric vector of the weights to use for
+#' the jth selected cluster, and it has the same name as the cluster it
+#' corresponds to.}
 #' @author Gregory Faletto, Jacob Bien
-#' @references Faletto, G., & Bien, J. (2022). Cluster Stability Selection.
-#' \emph{arXiv preprint arXiv:2201.00494}.
-#' \url{https://arxiv.org/abs/2201.00494}.
+#' @references 
+<<faletto2022>>
 #' @export
 getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
     min_num_clusts=1, max_num_clusts=NA){
@@ -766,7 +768,7 @@ getCssSelections <- function(css_results, weighting="sparse", cutoff=0,
     # sel_results$selected_feats is guaranteed to have length at least as long
     # as sel_results$selected_clusts by getSelectedClusters
     return(list(selected_clusts=sel_clusts,
-        selected_feats=sel_results$selected_feats))
+        selected_feats=sel_results$selected_feats, weights=sel_results$weights))
 }
 
 
@@ -1051,7 +1053,10 @@ getCssDesign <- function(css_results, newX=NA, weighting="weighted_avg",
 #' integer vectors; each vector contains the indices of one of the selected
 #' clusters.} \item{selected_feats}{An integer vector; the indices of the
 #' all of the selected features within all of the selected clusters (typically
-#' only one feature is selected from each cluster).}
+#' only one feature is selected from each cluster).} \item{weights}{A named list
+#' of the same length as selected_clusts. Each list element weights[[j]] is a
+#' numeric vector of the weights to use for the jth selected cluster, and it has
+#' the same name as the cluster it corresponds to.}
 #' @author Gregory Faletto, Jacob Bien
 #' @export
 cssSelect <- function(X, y, clusters = list(), lambda=NA, cutoff=NA,
