@@ -486,6 +486,8 @@ checkGenClusteredDataInputs <- function(p, k_unclustered, cluster_size,
 #' Bühlmann and van de Geer 2011, Section 2.5.1.). Default is "1se".
 #' @param nfolds Numeric or integer; the number of folds for cross-validation.
 #' Must be at least 4 (as specified by cv.glmnet). Default is 10.
+#' @param alpha Numeric; the elastic net mixing parameter. Default is 1 (in
+#' which case the penalty is for lasso)
 #' @return A numeric; the selected value of lambda.
 #' @author Gregory Faletto, Jacob Bien
 #' @references Bühlmann, P., & Meinshausen, N. (2006). High-Dimensional Graphs
@@ -498,7 +500,7 @@ checkGenClusteredDataInputs <- function(p, k_unclustered, cluster_size,
 #' Paths for Generalized Linear Models via Coordinate Descent. \emph{Journal of
 #' Statistical Software}, 33(1), 1-22. URL \url{https://www.jstatsoft.org/v33/i01/}.
 #' @export
-getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
+getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10, alpha=1){
     stopifnot(is.character(lambda_choice))
     stopifnot(length(lambda_choice) == 1)
     stopifnot(!is.na(lambda_choice))
@@ -512,6 +514,12 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
     stopifnot(length(nfolds) == 1)
     stopifnot(nfolds == round(nfolds))
     stopifnot(nfolds > 3)
+
+    stopifnot(is.numeric(alpha) | is.integer(alpha))
+    stopifnot(length(alpha) == 1)
+    stopifnot(!is.na(alpha))
+    stopifnot(alpha >= 0)
+    stopifnot(alpha <= 1)
 
     # Since we are using the lasso, we require y to be a real-valued response
     # (unlike for the general cluster stability selection procedure, where y
@@ -528,7 +536,7 @@ getLassoLambda <- function(X, y, lambda_choice="1se", nfolds=10){
 
     inds_size <- sample(1:n, n_sample)
     size_results <- glmnet::cv.glmnet(x=X[inds_size, ], y=y[inds_size],
-        family="gaussian", nfolds=nfolds)
+        family="gaussian", nfolds=nfolds, alpha=alpha)
 
     lambda_ret <- size_results[[paste("lambda.", lambda_choice, sep="")]]
 
